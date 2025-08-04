@@ -116,12 +116,6 @@ im aktuellen Verzeichnis erstellt.
 
 ---
 
-## Lizenz
-
-MIT License
-
----
-
 ## Autor
 
 Konrad Czernohous  
