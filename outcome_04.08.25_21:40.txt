@@ -1,0 +1,27 @@
+Hallo, ich bin eine PDF!
+Ich gucke mir mal an, wie dein Script formatiert:
+-
+Eins
+-
+Zwei
+-
+Und Drei
+Aha, Aha
+Hier ein Schematisches Bild:
+Und so??
+Bin ich größer?
+
+
+BILD: [Das Bild zeigt eine schematische Darstellung von SQL-Joins. Es gibt fünf verschiedene Arten von Joins, die jeweils durch unterschiedliche Farben und Symbole dargestellt werden:
+
+1. **INNER JOIN**: Die Kreise A und B haben einen gemeinsamen Bereich, der die Ergebnisse des Joins zeigt.
+2. **FULL JOIN**: Die Kreise A und B haben einen gemeinsamen Bereich, der die Ergebnisse des Joins zeigt.
+3. **LEFT JOIN**: Der Kreis A hat einen gemeinsamen Bereich mit dem Kreis B, der die Ergebnisse des Joins zeigt.
+4. **RIGHT JOIN**: Der Kreis B hat einen gemeinsamen Bereich mit dem Kreis A, der die Ergebnisse des Joins zeigt.
+5. **CROSS JOIN**: Die Kreise A und B haben keinen gemeinsamen Bereich, aber es gibt eine Verbindung zwischen jedem Element von A und jedem Element von B, was die Ergebnisse des Joins zeigt.
+
+Jeder Join-Typ wird mit einem Textfeld und einem entsprechenden Diagramm beschrieben.]
+
+
+BILD: [Das Bild enthält einen Text in deutscher Sprache. Der Text lautet: "Erkennt er auch mich? Ich bin ein Bild welches mit OCR gelesen werden müsste".]
+

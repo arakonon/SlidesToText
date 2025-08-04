@@ -10,6 +10,7 @@ import pytesseract, cv2, numpy as np
 from PIL import Image
 import shutil
 import datetime
+import hashlib
 
 
 # Optional: für ChatGPT-Zusammenfassung
@@ -25,9 +26,13 @@ def extract_text_layer(pdf_path):
     return "\n".join(full_text)
 
 def extract_images(pdf_path, img_folder="images"):
+    import collections
     os.makedirs(img_folder, exist_ok=True)
     doc = fitz.open(pdf_path)
     img_files = []
+    hash_to_paths = collections.defaultdict(list)
+
+    # 1. Alle Bilder extrahieren und Hashes sammeln
     for page in doc:
         for img_index, img in enumerate(page.get_images(full=True)):
             xref = img[0]
@@ -38,30 +43,34 @@ def extract_images(pdf_path, img_folder="images"):
             path = os.path.join(img_folder, fname)
             with open(path, "wb") as f:
                 f.write(data)
-            img_files.append(path)
+            h = image_hash(path)
+            hash_to_paths[h].append(path)
+
+    # 2. Nur Bilder mit Hash, das genau einmal vorkommt, behalten
+    for paths in hash_to_paths.values():
+        if len(paths) == 1:
+            img_files.append(paths[0])
+        else:
+            for p in paths:
+                print(f"Doppeltes Bild erkannt und entfernt: {os.path.basename(p)}\n")
+                os.remove(p)
     return img_files
 
 def caption_images(img_files,
                    model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
-    # Modell einmalig laden
-    model, processor = load(model_path)
-    cfg = load_config(model_path)
-
+    bildNr = 0
     captions = {}
     for img in img_files:
-        # MLX-VLM erwartet eine Liste von Bildern
+        model, processor = load(model_path)
+        cfg = load_config(model_path)
         pil_img = [Image.open(img).convert("RGB")]
-
-        # Einfache Prompt-Vorlage
-        prompt = "Beschreibe dieses Bild sehr genau, auf Deutsch. Wenn es nur Text enthält, gib den Text wieder. "
-        prompt_fmt = apply_chat_template(processor, cfg,
-                                         prompt, num_images=len(pil_img))
-
-        # Inferenz
-        cap = generate(model, processor, prompt_fmt, pil_img,
-                       verbose=False)  # returns str
+        prompt = "Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin."
+        prompt_fmt = apply_chat_template(processor, cfg, prompt, num_images=len(pil_img))
+        cap = generate(model, processor, prompt_fmt, pil_img, verbose=False)
         captions[img] = cap.text.strip()
-
+        del model, processor, cfg, pil_img, cap  # Speicher freigeben
+        bildNr += 1
+        print("\nBild Nr.", bildNr, "beschrieben\n")
     return captions
 
 def merge_text(text_layer, captions):
@@ -81,9 +90,13 @@ def insert_placeholders(text_layer, img_files):
     # Hier als einfache Variante: ganz unten pro Seite.
     return text_layer + "\n\n" + "\n".join(f"[IMG:{os.path.basename(i)}]" for i in img_files)
 
+def image_hash(image_path):
+    with open(image_path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
 def main():
-    if len(sys.argv) != 3:
-        print("Benutze: pdf_to_text.py input.pdf output.txt")
+    if len(sys.argv) != 2:
+        print("Benutze: pdf_to_text.py input.pdf")
         sys.exit(1)
     pdf_in  = sys.argv[1]
 
