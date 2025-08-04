@@ -55,20 +55,18 @@ def extract_images(pdf_path, img_folder="images"):
                 os.remove(p)
     return img_files, img_placeholders
 
-def caption_images(img_files,
-                   model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
-    print(f"{len(img_files)} Bilder werden beschrieben...\n")  # <--- Hier die Ausgabe
+def caption_images(img_files, model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
+    print(f"{len(img_files)} Bilder werden beschrieben...\n")
+    model, processor = load(model_path)
+    cfg = load_config(model_path)
     bildNr = 0
     captions = {}
     for img in img_files:
-        model, processor = load(model_path)
-        cfg = load_config(model_path)
         pil_img = [Image.open(img).convert("RGB").resize((512, 512))]
         prompt = "Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin."
         prompt_fmt = apply_chat_template(processor, cfg, prompt, num_images=len(pil_img))
         cap = generate(model, processor, prompt_fmt, pil_img, verbose=False)
         captions[img] = cap.text.strip()
-        del model, processor, cfg, pil_img, cap  # Speicher freigeben
         bildNr += 1
         print("\nBild Nr.", bildNr, "beschrieben\n")
     return captions
@@ -93,20 +91,35 @@ def image_hash(image_path):
     with open(image_path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
-def remove_repeated_headers(text_layer_list, min_count=5):
-    # Zerlege jede Seite in Zeilen
-    first_lines = [page.splitlines()[0] for page in text_layer_list if page.strip()]
-    # Zähle, welche Zeilen oft vorkommen
-    line_counts = Counter(first_lines)
-    # Finde die Zeilen, die mehrfach vorkommen
-    repeated = {line for line, count in line_counts.items() if count >= min_count}
-    # Entferne diese Zeilen am Seitenanfang
+def remove_repeated_headers_auto(text_layer_list, min_count=5, max_header_lines=5):
+    print("Suche nach wiederholten Kopfzeilen ...")
+    candidates = []
+    for n in range(1, max_header_lines+1):
+        blocks = [
+            "\n".join(page.splitlines()[:n])
+            for page in text_layer_list if len(page.splitlines()) >= n
+        ]
+        block_counts = Counter(blocks)
+        for block, count in block_counts.items():
+            if count >= min_count:
+                print(f"Kandidat für Kopfzeile ({n} Zeilen, {count} Vorkommen):\n---\n{block}\n---\n")
+                candidates.append((n, block, count))
+    if not candidates:
+        print("Keine Kopfzeile erkannt.")
+        return text_layer_list
+    candidates.sort(key=lambda x: (x[0], x[2]), reverse=True)
+    header_lines, header_block, _ = candidates[0]
+    print(f"Entferne Kopfzeile ({header_lines} Zeilen):\n---\n{header_block}\n---\n")
     cleaned = []
+    removed_count = 0
     for page in text_layer_list:
         lines = page.splitlines()
-        if lines and lines[0] in repeated:
-            lines = lines[1:]
+        block = "\n".join(lines[:header_lines])
+        if block == header_block:
+            lines = lines[header_lines:]
+            removed_count += 1
         cleaned.append("\n".join(lines))
+    print(f"Kopfzeile auf {removed_count} Seiten entfernt.\n")
     return cleaned
 
 def main():
@@ -122,7 +135,7 @@ def main():
     # 1. Text-Layer extrahieren
     print("Extrahiere Text-Layer...\n")
     raw_text = extract_text_layer(pdf_in)
-    raw_text = remove_repeated_headers(raw_text, min_count=3)  # min_count ggf. anpassen
+    raw_text = remove_repeated_headers_auto(raw_text, min_count=5, max_header_lines=5)
 
     # 2. Bilder extrahieren
     print("Extrahiere Bilder...\n")
@@ -146,8 +159,8 @@ def main():
         f.write(final)
 
     # 7. Bild-Ordner löschen
-    #print("Bereinige temporäre Dateien...\n")
-    #shutil.rmtree("images", ignore_errors=True)
+    print("Bereinige temporäre Dateien...\n")
+    shutil.rmtree("images", ignore_errors=True)
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
 
