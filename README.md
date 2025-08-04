@@ -1,8 +1,8 @@
-# SlidesToText
+# SlidesToText WIP
 
 KI-Generiert: 
 
-**SlidesToText WIP!!!** ist ein Python-Tool, das PDF-Folien analysiert, den Text extrahiert und für jedes (nicht doppelte) Bild eine automatische Bildbeschreibung generiert. Die Ausgabe ist eine angereicherte Textdatei.
+**SlidesToText** ist ein Python-Tool, das PDF-Folien analysiert, den Text extrahiert und für jedes (nicht doppelte) Bild eine automatische Bildbeschreibung generiert. Die Ausgabe ist eine angereicherte Textdatei.
 
 ---
 
