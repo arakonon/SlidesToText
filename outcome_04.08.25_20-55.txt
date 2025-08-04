@@ -1,0 +1,29 @@
+Hallo, ich bin eine PDF!
+Ich gucke mir mal an, wie dein Script formatiert:
+-
+Eins
+-
+Zwei
+-
+Und Drei
+Aha, Aha
+Hier ein Schematisches Bild:
+Und so??
+Bin ich größer?
+
+
+BILD: [Das Bild zeigt eine grafische Darstellung von SQL-Joins. Es gibt fünf verschiedene Arten von Joins, die jeweils durch unterschiedliche Farben und Symbole dargestellt werden:
+
+1. **INNER JOIN**: Dieser Join kombiniert die Zeilen aus zwei Tabellen, die auf einer oder mehreren Spalten übereinstimmen. Die Symbole für die Tabellen A und B sind blau und schließen sich ab.
+
+2. **FULL JOIN**: Dieser Join kombiniert alle Zeilen aus beiden Tabellen, obwohl die Zeilen möglicherweise nicht übereinstimmen. Die Symbole für die Tabellen A und B sind orange und schließen sich ab.
+
+3. **LEFT JOIN**: Dieser Join kombiniert alle Zeilen der linken Tabelle mit allen passenden Zeilen der rechten Tabelle. Wenn es keine passenden Zeilen gibt, werden NULL-Werte zurückgegeben. Die Symbole für die Tabellen A und B sind lila und schließen sich ab.
+
+4. **RIGHT JOIN**: Dieser Join kombiniert alle Zeilen der rechten Tabelle mit allen passenden Zeilen der linken Tabelle. Wenn es keine passenden]
+
+
+BILD: [Das Bild zeigt einen Text auf Deutsch. Der Text lautet:
+
+"Erkennt er auch mich? Ich bin ein Bild welches mit OCR gelesen werden müsste"]
+

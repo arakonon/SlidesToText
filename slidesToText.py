@@ -2,13 +2,15 @@
 import sys
 import os
 import fitz                         # PyMuPDF
-from pdf2image import convert_from_path
-import pytesseract
-import easyocr
 from PIL import Image
 from mlx_vlm import load, generate
 from mlx_vlm.prompt_utils import apply_chat_template
 from mlx_vlm.utils import load_config
+import pytesseract, cv2, numpy as np
+from PIL import Image
+import shutil
+import datetime
+
 
 # Optional: für ChatGPT-Zusammenfassung
 # import openai
@@ -39,14 +41,6 @@ def extract_images(pdf_path, img_folder="images"):
             img_files.append(path)
     return img_files
 
-def ocr_on_images(img_files, lang="deu"):
-    # Tesseract via pytesseract
-    ocr_texts = {}
-    for img in img_files:
-        txt = pytesseract.image_to_string(img, lang=lang)
-        ocr_texts[img] = txt.strip()
-    return ocr_texts
-
 def caption_images(img_files,
                    model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
     # Modell einmalig laden
@@ -59,7 +53,7 @@ def caption_images(img_files,
         pil_img = [Image.open(img).convert("RGB")]
 
         # Einfache Prompt-Vorlage
-        prompt = "Beschreibe dieses Bild sehr genau, auf Deutsch."
+        prompt = "Beschreibe dieses Bild sehr genau, auf Deutsch. Wenn es nur Text enthält, gib den Text wieder. "
         prompt_fmt = apply_chat_template(processor, cfg,
                                          prompt, num_images=len(pil_img))
 
@@ -70,16 +64,13 @@ def caption_images(img_files,
 
     return captions
 
-def merge_text(text_layer, ocr_texts, captions):
-    # Setze Platzhalter für jedes Bild
+def merge_text(text_layer, captions):
     enriched = text_layer
-    for img in ocr_texts:
+    for img in captions:
         placeholder = f"[IMG:{os.path.basename(img)}]"
-        # Falls OCR Text vorhanden, hänge ihn an die Caption an
-        combined = captions[img]
-        if ocr_texts[img]:
-            combined += "\n(Erkannter Text im Bild: " + ocr_texts[img] + ")"
-        enriched = enriched.replace(placeholder, combined)
+        # Hier caption anpassen
+        # z.B. "BILD: ..." oder nur den Text
+        enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}]\n\n")
     return enriched
 
 def insert_placeholders(text_layer, img_files):
@@ -92,32 +83,42 @@ def insert_placeholders(text_layer, img_files):
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: pdf_to_text.py input.pdf output.txt")
+        print("Benutze: pdf_to_text.py input.pdf output.txt")
         sys.exit(1)
     pdf_in  = sys.argv[1]
-    out_txt  = sys.argv[2]
+
+    # Erzeuge Dateinamen mit Datum und Uhrzeit
+    now = datetime.datetime.now()
+    out_txt = f"outcome_{now.strftime('%d.%m.%y_%H:%M')}.txt"
 
     # 1. Text-Layer extrahieren
+    print("Extrahiere Text-Layer...\n")
     raw_text = extract_text_layer(pdf_in)
 
     # 2. Bilder extrahieren
+    print("Extrahiere Bilder...\n")
     imgs = extract_images(pdf_in)
 
     # 3. Platzhalter einfügen
+    print("Füge Platzhalter für Bilder ein...\n")
     text_with_place = insert_placeholders(raw_text, imgs)
 
-    # 4. OCR auf Bildern
-    ocrs = ocr_on_images(imgs)
-
-    # 5. Semantische Bildbeschreibung
+    # 4. Semantische Bildbeschreibung
+    print("Beschreibe Bilder mit MLX-VLM...\n")
     caps = caption_images(imgs)
 
-    # 6. Zusammenführen
-    final = merge_text(text_with_place, ocrs, caps)
+    # 5. Zusammenführen
+    print("Füge Text und Bildbeschreibungen zusammen...\n")
+    final = merge_text(text_with_place, caps)
 
-    # 7. Ausgabe
+    # 6. Ausgabe
+    print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
     with open(out_txt, "w") as f:
         f.write(final)
+
+    # 7. Bild-Ordner löschen
+    print("Bereinige temporäre Dateien...\n")
+    shutil.rmtree("images", ignore_errors=True)
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
 
