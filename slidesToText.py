@@ -11,6 +11,7 @@ from PIL import Image
 import shutil
 import datetime
 import hashlib
+from collections import Counter
 
 
 # Optional: für ChatGPT-Zusammenfassung
@@ -62,7 +63,7 @@ def caption_images(img_files,
     for img in img_files:
         model, processor = load(model_path)
         cfg = load_config(model_path)
-        pil_img = [Image.open(img).convert("RGB")]
+        pil_img = [Image.open(img).convert("RGB").resize((512, 512))]
         prompt = "Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin."
         prompt_fmt = apply_chat_template(processor, cfg, prompt, num_images=len(pil_img))
         cap = generate(model, processor, prompt_fmt, pil_img, verbose=False)
@@ -92,6 +93,22 @@ def image_hash(image_path):
     with open(image_path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
+def remove_repeated_headers(text_layer_list, min_count=5):
+    # Zerlege jede Seite in Zeilen
+    first_lines = [page.splitlines()[0] for page in text_layer_list if page.strip()]
+    # Zähle, welche Zeilen oft vorkommen
+    line_counts = Counter(first_lines)
+    # Finde die Zeilen, die mehrfach vorkommen
+    repeated = {line for line, count in line_counts.items() if count >= min_count}
+    # Entferne diese Zeilen am Seitenanfang
+    cleaned = []
+    for page in text_layer_list:
+        lines = page.splitlines()
+        if lines and lines[0] in repeated:
+            lines = lines[1:]
+        cleaned.append("\n".join(lines))
+    return cleaned
+
 def main():
     if len(sys.argv) != 2:
         print("Benutze: pdf_to_text.py input.pdf")
@@ -105,6 +122,7 @@ def main():
     # 1. Text-Layer extrahieren
     print("Extrahiere Text-Layer...\n")
     raw_text = extract_text_layer(pdf_in)
+    raw_text = remove_repeated_headers(raw_text, min_count=3)  # min_count ggf. anpassen
 
     # 2. Bilder extrahieren
     print("Extrahiere Bilder...\n")
@@ -128,8 +146,8 @@ def main():
         f.write(final)
 
     # 7. Bild-Ordner löschen
-    print("Bereinige temporäre Dateien...\n")
-    shutil.rmtree("images", ignore_errors=True)
+    #print("Bereinige temporäre Dateien...\n")
+    #shutil.rmtree("images", ignore_errors=True)
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
 
