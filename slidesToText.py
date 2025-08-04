@@ -48,7 +48,7 @@ def ocr_on_images(img_files, lang="deu"):
     return ocr_texts
 
 def caption_images(img_files,
-                   model_path="mlx-community/llava-v1.6-mistral-7b-4bit"):
+                   model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
     # Modell einmalig laden
     model, processor = load(model_path)
     cfg = load_config(model_path)
