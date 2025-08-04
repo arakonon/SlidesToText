@@ -6,7 +6,9 @@ from pdf2image import convert_from_path
 import pytesseract
 import easyocr
 from PIL import Image
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from mlx_vlm import load, generate
+from mlx_vlm.prompt_utils import apply_chat_template
+from mlx_vlm.utils import load_config
 
 # Optional: für ChatGPT-Zusammenfassung
 # import openai
@@ -45,16 +47,27 @@ def ocr_on_images(img_files, lang="deu"):
         ocr_texts[img] = txt.strip()
     return ocr_texts
 
-def caption_images(img_files, device="cpu"):
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    model     = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(device)
+def caption_images(img_files,
+                   model_path="mlx-community/llava-v1.6-mistral-7b-4bit"):
+    # Modell einmalig laden
+    model, processor = load(model_path)
+    cfg = load_config(model_path)
+
     captions = {}
     for img in img_files:
-        image = Image.open(img).convert("RGB")
-        inputs = processor(image, return_tensors="pt").to(device)
-        out    = model.generate(**inputs)
-        cap    = processor.decode(out[0], skip_special_tokens=True)
-        captions[img] = cap
+        # MLX-VLM erwartet eine Liste von Bildern
+        pil_img = [Image.open(img).convert("RGB")]
+
+        # Einfache Prompt-Vorlage
+        prompt = "Beschreibe dieses Bild sehr genau, auf Deutsch."
+        prompt_fmt = apply_chat_template(processor, cfg,
+                                         prompt, num_images=len(pil_img))
+
+        # Inferenz
+        cap = generate(model, processor, prompt_fmt, pil_img,
+                       verbose=False)  # returns str
+        captions[img] = cap.text.strip()
+
     return captions
 
 def merge_text(text_layer, ocr_texts, captions):
