@@ -19,45 +19,44 @@ import hashlib
 
 def extract_text_layer(pdf_path):
     doc = fitz.open(pdf_path)
-    full_text = []
-    for page in doc:
-        txt = page.get_text()
-        full_text.append(txt)
-    return "\n".join(full_text)
+    return [page.get_text() for page in doc]  # Liste: ein Eintrag pro Seite
 
 def extract_images(pdf_path, img_folder="images"):
     import collections
     os.makedirs(img_folder, exist_ok=True)
     doc = fitz.open(pdf_path)
     img_files = []
+    img_placeholders = collections.defaultdict(list)  # Seite -> [Platzhalter]
     hash_to_paths = collections.defaultdict(list)
 
-    # 1. Alle Bilder extrahieren und Hashes sammeln
-    for page in doc:
+    for page_num, page in enumerate(doc):
         for img_index, img in enumerate(page.get_images(full=True)):
             xref = img[0]
             base = doc.extract_image(xref)
             data = base["image"]
             ext = base["ext"]
-            fname = f"page{page.number+1}_{img_index}.{ext}"
+            fname = f"page{page_num+1}_{img_index}.{ext}"
             path = os.path.join(img_folder, fname)
             with open(path, "wb") as f:
                 f.write(data)
             h = image_hash(path)
-            hash_to_paths[h].append(path)
+            hash_to_paths[h].append((path, page_num))
 
-    # 2. Nur Bilder mit Hash, das genau einmal vorkommt, behalten
+    # Nur eindeutige Bilder behalten
     for paths in hash_to_paths.values():
         if len(paths) == 1:
-            img_files.append(paths[0])
+            path, page_num = paths[0]
+            img_files.append(path)
+            img_placeholders[page_num].append(f"[IMG:{os.path.basename(path)}]")
         else:
-            for p in paths:
-                print(f"Doppeltes Bild erkannt und entfernt: {os.path.basename(p)}\n")
+            for p, _ in paths:
+                print(f"Doppeltes Bild erkannt und entfernt: {os.path.basename(p)} \n")
                 os.remove(p)
-    return img_files
+    return img_files, img_placeholders
 
 def caption_images(img_files,
                    model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
+    print(f"{len(img_files)} Bilder werden beschrieben...\n")  # <--- Hier die Ausgabe
     bildNr = 0
     captions = {}
     for img in img_files:
@@ -73,22 +72,21 @@ def caption_images(img_files,
         print("\nBild Nr.", bildNr, "beschrieben\n")
     return captions
 
-def merge_text(text_layer, captions):
-    enriched = text_layer
+def merge_text(text_with_place, captions):
+    enriched = text_with_place
     for img in captions:
         placeholder = f"[IMG:{os.path.basename(img)}]"
-        # Hier caption anpassen
-        # z.B. "BILD: ..." oder nur den Text
-        enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}]\n\n")
+        enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}] \n")
     return enriched
 
-def insert_placeholders(text_layer, img_files):
-    # Füge am Ende jeder Seite einen Platzhalter ein
-    doc = fitz.open()
-    # Wir nutzen hier einfach den ursprünglichen Text, darum Dummy:
-    # Du kannst auch die genaue Position im Text suchen und markieren.
-    # Hier als einfache Variante: ganz unten pro Seite.
-    return text_layer + "\n\n" + "\n".join(f"[IMG:{os.path.basename(i)}]" for i in img_files)
+def insert_placeholders(text_layer_list, img_placeholders):
+    # text_layer_list: Liste mit Text pro Seite
+    # img_placeholders: Dict {seitennummer: [platzhalter, ...]}
+    result = []
+    for i, text in enumerate(text_layer_list):
+        placeholders = "\n".join(img_placeholders.get(i, []))
+        result.append(text + ("\n" + placeholders if placeholders else ""))
+    return "\n\n".join(result)
 
 def image_hash(image_path):
     with open(image_path, "rb") as f:
@@ -110,11 +108,11 @@ def main():
 
     # 2. Bilder extrahieren
     print("Extrahiere Bilder...\n")
-    imgs = extract_images(pdf_in)
+    imgs, img_placeholders = extract_images(pdf_in)
 
     # 3. Platzhalter einfügen
     print("Füge Platzhalter für Bilder ein...\n")
-    text_with_place = insert_placeholders(raw_text, imgs)
+    text_with_place = insert_placeholders(raw_text, img_placeholders)
 
     # 4. Semantische Bildbeschreibung
     print("Beschreibe Bilder mit MLX-VLM...\n")
