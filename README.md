@@ -106,6 +106,24 @@ im aktuellen Verzeichnis erstellt.
 
 ---
 
+## Optional: Automatische Textformatierung mit MLX-LM
+
+Das Tool kann den finalen Text optional von einem kleinen lokalen LLM (z.B. Qwen1.5-1.8B-Chat-4bit) mit [mlx-lm](https://github.com/ml-explore/mlx-lm) formatieren lassen.  
+Dazu wird das Paket `mlx-lm` benötigt:
+
+```bash
+pip install mlx-lm
+```
+
+Das Modell wird beim ersten Lauf automatisch heruntergeladen.  
+Die Formatierung kann im Code aktiviert/deaktiviert werden (siehe Funktion `format_ocr` in `slidesToText.py`).
+
+> **Hinweis:**  
+> Die automatische Formatierung mit LLM ist experimentell.  
+> Bis jetzt ist das Ergebnis noch unbrauchbar.  
+
+---
+
 ## Fehlerbehebung
 
 - **Out of Memory:**  
@@ -120,3 +138,4 @@ im aktuellen Verzeichnis erstellt.
 
 Konrad Czernohous  
 2025
+
