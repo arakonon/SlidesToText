@@ -1,0 +1,8 @@
+pymupdf
+Pillow
+pytesseract
+opencv-python
+numpy
+mlx
+mlx-vlm
+mlx-lm

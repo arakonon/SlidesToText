@@ -1,0 +1,6 @@
+pymupdf
+Pillow
+pytesseract
+opencv-python
+numpy
+google-generativeai
