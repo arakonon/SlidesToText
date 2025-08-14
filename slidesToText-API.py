@@ -8,7 +8,11 @@ import shutil
 import datetime
 import hashlib
 from collections import Counter, defaultdict
+import os
 import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Neu: Google AI Studio / Gemini
 import google.generativeai as genai
@@ -162,7 +166,9 @@ def remove_consecutive_duplicate_lines(text_layer_list):
 
 # ---------- Neu: Gemini-basierte Funktionen ----------
 def _configure_gemini():
-    api_key = "***REMOVED***"  # Use your hardcoded key
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError("GOOGLE_API_KEY ist nicht gesetzt. Erstelle eine .env Datei oder setze die Umgebungsvariable.")
     genai.configure(api_key=api_key)
 
 def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
@@ -175,8 +181,8 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
     captions = {}
     prompt = (
         "Beschreibe dieses Bild. "
-        "Bei Fotografie/Szene: max. zwei knappe Sätze. "
-        "Bei Diagramm/Skizze/Schemata: genaue beschreiben und interpretieren. "
+        "Bei Fotografie/Szene: maximal zwei knappe Sätze. "
+        "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretieren. "
         "Wenn nur Text: gib den Text wörtlich wieder. "
         "Wenn Teile unleserlich sind, weise darauf hin."
     )

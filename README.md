@@ -75,8 +75,13 @@ Für die API-Version benötigst du einen Google AI Studio API Key:
 
 1. Gehe zu [Google AI Studio](https://aistudio.google.com/)
 2. Erstelle einen API Key
-3. Setze den API Key als Umgebungsvariable:
+3. Kopiere die `.env.example` Datei zu `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Öffne die `.env` Datei und ersetze `your-google-api-key-here` mit deinem echten API Key
 
+**Alternativ** kannst du den API Key als Umgebungsvariable setzen:
 ```bash
 export GOOGLE_API_KEY="dein-api-key-hier"
 ```

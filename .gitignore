@@ -1,5 +1,18 @@
+# Python
 venv/
-.DS*
-outcome*
-*.pdf
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporäre Dateien  
 images/
+outcome_*.txt
+
+# Test PDFs (optional)
+*.pdf
+
+# API Keys - niemals committen!
+.env
+
+# macOS
+.DS_Store
