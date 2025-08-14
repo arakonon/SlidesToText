@@ -162,12 +162,10 @@ def remove_consecutive_duplicate_lines(text_layer_list):
 
 # ---------- Neu: Gemini-basierte Funktionen ----------
 def _configure_gemini():
-    api_key = os.environ.get("***REMOVED***")
-    if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY ist nicht gesetzt.")
+    api_key = "***REMOVED***"  # Use your hardcoded key
     genai.configure(api_key=api_key)
 
-def caption_images_gemini(img_files, model_name="gemini-1.5-flash"):
+def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
     # Bildbeschreibung über Google AI Studio (Gemini). Ein Request pro Bild:
     # Content = [PIL.Image, Prompt].
 
@@ -176,9 +174,9 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash"):
     print(f"{len(img_files)} Bilder werden mit Gemini beschrieben...\n")
     captions = {}
     prompt = (
-        "Beschreibe dieses Bild auf Deutsch. "
+        "Beschreibe dieses Bild. "
         "Bei Fotografie/Szene: max. zwei knappe Sätze. "
-        "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretieren. "
+        "Bei Diagramm/Skizze/Schemata: genaue beschreiben und interpretieren. "
         "Wenn nur Text: gib den Text wörtlich wieder. "
         "Wenn Teile unleserlich sind, weise darauf hin."
     )
@@ -193,7 +191,7 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash"):
         print(f"Bild {idx}/{len(img_files)} beschrieben: {os.path.basename(img_path)}")
     return captions
 
-def format_ocr_gemini(text, model_name="gemini-1.5-flash"):
+def format_ocr_gemini(text, model_name="gemini-1.5-flash-8b"):
     """
     Optionale Textnachformatierung wie in deiner V1 – jetzt via Gemini.
     """
@@ -238,14 +236,14 @@ def main():
     text_with_place = insert_placeholders(raw_text, img_placeholders)
 
     print("Beschreibe Bilder mit Gemini...\n")
-    caps = caption_images_gemini(imgs, model_name="gemini-1.5-flash")
+    caps = caption_images_gemini(imgs, model_name="gemini-1.5-flash-8b")
 
     print("Füge Text und Bildbeschreibungen zusammen...\n")
     final = merge_text(text_with_place, caps)
 
-    # Optional: Nachformatierung (kannst du auch auskommentieren)
-    # print("Optimiere die Formatierung mit Gemini...\n")
-    # final = format_ocr_gemini(final, model_name="gemini-1.5-flash")
+    # Optional: Nachformatierung 
+    print("Optimiere die Formatierung mit Gemini...\n")
+    final = format_ocr_gemini(final, model_name="gemini-1.5-flash-8b")
 
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
     with open(out_txt, "w", encoding="utf-8") as f:
