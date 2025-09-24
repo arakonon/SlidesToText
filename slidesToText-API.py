@@ -60,18 +60,42 @@ def extract_images(pdf_path, img_folder="images"):
                     pass
     return img_files, img_placeholders
 
-def insert_placeholders(text_layer_list, img_placeholders):
+def insert_placeholders(text_layer_list, img_placeholders, existing_imgs):
+    """
+    Fügt nur Platzhalter für tatsächlich vorhandene Bilder ein
+    """
+    # Erstelle Set der vorhandenen Bildnamen für schnelle Suche
+    existing_basenames = {os.path.basename(img) for img in existing_imgs}
+    
     result = []
     for i, text in enumerate(text_layer_list):
-        placeholders = "\n".join(img_placeholders.get(i, []))
-        result.append(text + ("\n" + placeholders if placeholders else ""))
+        # Filtere Platzhalter: nur für vorhandene Bilder
+        filtered_placeholders = []
+        for placeholder in img_placeholders.get(i, []):
+            # Extrahiere Bildname aus Platzhalter [IMG:filename.ext]
+            if placeholder.startswith("[IMG:") and placeholder.endswith("]"):
+                img_name = placeholder[5:-1]  # Entferne [IMG: und ]
+                if img_name in existing_basenames:
+                    filtered_placeholders.append(placeholder)
+        
+        placeholders_text = "\n".join(filtered_placeholders)
+        result.append(text + ("\n" + placeholders_text if placeholders_text else ""))
     return "\n\n".join(result)
 
 def merge_text(text_with_place, captions):
+    """
+    Ersetzt Platzhalter durch Bildbeschreibungen und entfernt übrig gebliebene Platzhalter
+    """
     enriched = text_with_place
+    
+    # Ersetze vorhandene Bilder durch Beschreibungen
     for img in captions:
         placeholder = f"[IMG:{os.path.basename(img)}]"
         enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}]\n")
+    
+    # Entferne alle übrig gebliebenen Platzhalter (für gelöschte Bilder)
+    enriched = re.sub(r'\[IMG:[^\]]+\]\n?', '', enriched)
+    
     return enriched
 
 def mask_footer_line(line):
@@ -179,13 +203,13 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
     model = genai.GenerativeModel(model_name)
     print(f"{len(img_files)} Bilder werden mit Gemini beschrieben...\n")
     captions = {}
-    prompt = (
-        "Beschreibe dieses Bild. "
-        "Bei Fotografie/Szene: maximal zwei knappe Sätze. "
-        "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretieren. "
-        "Wenn nur Text: gib den Text wörtlich wieder. "
-        "Wenn Teile unleserlich sind, weise darauf hin."
-    )
+    prompt = ("Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin.")
+        # EIGENTLICH DAS HIER, FUNKT ABER SO SEMI DESWEGEN ANDERES PROBIERT/PROBIEREN
+        # "Beschreibe dieses Bild. "
+        # "Bei Fotografie/Szene: maximal zwei knappe Sätze. "
+        # "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretieren. "
+        # "Wenn nur Text: gib den Text wörtlich wieder. "
+        # "Wenn Teile unleserlich sind, weise darauf hin."
     for idx, img_path in enumerate(img_files, 1):
         pil_img = Image.open(img_path).convert("RGB")
         try:
@@ -198,9 +222,6 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
     return captions
 
 def format_ocr_gemini(text, model_name="gemini-1.5-flash-8b"):
-    """
-    Optionale Textnachformatierung wie in deiner V1 – jetzt via Gemini.
-    """
     _configure_gemini()
     model = genai.GenerativeModel(model_name)
     system = (
@@ -238,11 +259,29 @@ def main():
     print("Extrahiere Bilder...\n")
     imgs, img_placeholders = extract_images(pdf_in)
 
-    print("Füge Platzhalter für Bilder ein...\n")
-    text_with_place = insert_placeholders(raw_text, img_placeholders)
+    # Neue Pause für manuelle Bildauswahl
+    if imgs:
+        print(f"\n🖼️  {len(imgs)} Bilder wurden in den Ordner 'images/' extrahiert.")
+        print("📁 Überprüfe jetzt die Bilder und lösche unerwünschte Dateien aus dem 'images/' Ordner.")
+        print("💡 Du kannst den Finder öffnen mit: open images/")
+        print("\n⏸️  Drücke Enter, um fortzufahren, sobald du fertig bist...")
+        input()
+        
+        # Aktualisierte Bilderliste nach manueller Bearbeitung
+        imgs = [img for img in imgs if os.path.exists(img)]
+        print(f"✅ {len(imgs)} Bilder werden an Gemini gesendet.\n")
+    else:
+        print("Keine Bilder gefunden.\n")
 
-    print("Beschreibe Bilder mit Gemini...\n")
-    caps = caption_images_gemini(imgs, model_name="gemini-1.5-flash-8b")
+    # Platzhalter nur für noch vorhandene Bilder einfügen
+    print("Füge Platzhalter für Bilder ein...\n")
+    text_with_place = insert_placeholders(raw_text, img_placeholders, imgs)
+
+    if imgs:
+        print("Beschreibe Bilder mit Gemini...\n")
+        caps = caption_images_gemini(imgs, model_name="gemini-1.5-flash-8b")
+    else:
+        caps = {}
 
     print("Füge Text und Bildbeschreibungen zusammen...\n")
     final = merge_text(text_with_place, caps)
