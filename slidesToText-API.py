@@ -261,15 +261,15 @@ def main():
 
     # Neue Pause für manuelle Bildauswahl
     if imgs:
-        print(f"\n🖼️  {len(imgs)} Bilder wurden in den Ordner 'images/' extrahiert.")
-        print("📁 Überprüfe jetzt die Bilder und lösche unerwünschte Dateien aus dem 'images/' Ordner.")
-        print("💡 Du kannst den Finder öffnen mit: open images/")
-        print("\n⏸️  Drücke Enter, um fortzufahren, sobald du fertig bist...")
+        print(f"\n{len(imgs)} Bilder wurden in den Ordner 'images/' extrahiert.")
+        print("Überprüfe jetzt die Bilder und lösche unerwünschte Dateien aus dem 'images/' Ordner.")
+        print("Du kannst den Finder öffnen mit: open images/")
+        print("\nDrücke Enter, um fortzufahren, sobald du fertig bist...")
         input()
         
         # Aktualisierte Bilderliste nach manueller Bearbeitung
         imgs = [img for img in imgs if os.path.exists(img)]
-        print(f"✅ {len(imgs)} Bilder werden an Gemini gesendet.\n")
+        print(f"{len(imgs)} Bilder werden an Gemini gesendet.\n")
     else:
         print("Keine Bilder gefunden.\n")
 
