@@ -195,7 +195,7 @@ def _configure_gemini():
         raise RuntimeError("GOOGLE_API_KEY ist nicht gesetzt. Erstelle eine .env Datei oder setze die Umgebungsvariable.")
     genai.configure(api_key=api_key)
 
-def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
+def caption_images_gemini(img_files, model_name="gemini-2.5-flash"):
     # Bildbeschreibung über Google AI Studio (Gemini). Ein Request pro Bild:
     # Content = [PIL.Image, Prompt].
 
@@ -203,7 +203,7 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
     model = genai.GenerativeModel(model_name)
     print(f"{len(img_files)} Bilder werden mit Gemini beschrieben...\n")
     captions = {}
-    prompt = ("Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin.")
+    prompt = ("Beschreibe dieses Bild möglichst knapp auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild genauer und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin.")
         # EIGENTLICH DAS HIER, FUNKT ABER SO SEMI DESWEGEN ANDERES PROBIERT/PROBIEREN
         # "Beschreibe dieses Bild. "
         # "Bei Fotografie/Szene: maximal zwei knappe Sätze. "
@@ -221,7 +221,7 @@ def caption_images_gemini(img_files, model_name="gemini-1.5-flash-8b"):
         print(f"Bild {idx}/{len(img_files)} beschrieben: {os.path.basename(img_path)}")
     return captions
 
-def format_ocr_gemini(text, model_name="gemini-1.5-flash-8b"):
+def format_ocr_gemini(text, model_name="gemini-2.5-flash"):
     _configure_gemini()
     model = genai.GenerativeModel(model_name)
     system = (
@@ -279,7 +279,7 @@ def main():
 
     if imgs:
         print("Beschreibe Bilder mit Gemini...\n")
-        caps = caption_images_gemini(imgs, model_name="gemini-1.5-flash-8b")
+        caps = caption_images_gemini(imgs, model_name="gemini-2.5-flash")
     else:
         caps = {}
 
@@ -288,7 +288,7 @@ def main():
 
     # Optional: Nachformatierung 
     print("Optimiere die Formatierung mit Gemini...\n")
-    final = format_ocr_gemini(final, model_name="gemini-1.5-flash-8b")
+    final = format_ocr_gemini(final, model_name="gemini-2.5-flash")
 
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
     with open(out_txt, "w", encoding="utf-8") as f:
