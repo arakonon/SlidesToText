@@ -11,6 +11,9 @@ from collections import Counter, defaultdict
 import os
 import re
 from dotenv import load_dotenv
+import subprocess
+import glob
+import platform
 
 load_dotenv()
 
@@ -203,11 +206,11 @@ def caption_images_gemini(img_files, model_name="gemini-2.5-flash"):
     model = genai.GenerativeModel(model_name)
     print(f"{len(img_files)} Bilder werden mit Gemini beschrieben...\n")
     captions = {}
-    prompt = ("Beschreibe dieses Bild möglichst knapp auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild genauer und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin.")
+    prompt = ("Beschreibe dieses Bild möglichst knapp auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, versuche das Bild in Markdown Mermaid darzustellen, wenn das nicht geht beschreibe das Bild genauer und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin.")
         # EIGENTLICH DAS HIER, FUNKT ABER SO SEMI DESWEGEN ANDERES PROBIERT/PROBIEREN
         # "Beschreibe dieses Bild. "
         # "Bei Fotografie/Szene: maximal zwei knappe Sätze. "
-        # "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretieren. "
+        # "Bei Diagramm/Skizze/Schemata: sehr genau beschreiben und interpretiere. "
         # "Wenn nur Text: gib den Text wörtlich wieder. "
         # "Wenn Teile unleserlich sind, weise darauf hin."
     for idx, img_path in enumerate(img_files, 1):
@@ -237,12 +240,77 @@ def format_ocr_gemini(text, model_name="gemini-2.5-flash"):
     except Exception as e:
         return f"(Formatierungsfehler: {e})\n\n{text}"
 
+def move_old_outcome_files():
+    """
+    Verschiebt alle bestehenden outcome_*.txt Dateien in den Legacy Outcomes Ordner
+    """
+    legacy_folder = "Legacy Outcomes"
+    os.makedirs(legacy_folder, exist_ok=True)
+    
+    # Finde alle outcome_*.txt Dateien im Hauptordner
+    outcome_files = glob.glob("outcome_*.txt")
+    
+    if outcome_files:
+        print(f"Verschiebe {len(outcome_files)} alte outcome-Datei(en) nach '{legacy_folder}/'...")
+        for old_file in outcome_files:
+            destination = os.path.join(legacy_folder, old_file)
+            
+            # Falls Datei bereits existiert, füge Zeitstempel hinzu
+            if os.path.exists(destination):
+                name, ext = os.path.splitext(old_file)
+                timestamp = datetime.datetime.now().strftime('%H-%M-%S')
+                destination = os.path.join(legacy_folder, f"{name}_{timestamp}{ext}")
+            
+            try:
+                shutil.move(old_file, destination)
+                print(f"{old_file} → {destination}")
+            except Exception as e:
+                print(f"Fehler beim Verschieben von {old_file}: {e}")
+        print()
+
+def open_file_or_folder(path):
+    """Öffnet Datei oder Ordner plattformspezifisch"""
+    try:
+        if platform.system() == "Darwin":  # macOS
+            subprocess.run(["open", path], check=True)
+        elif platform.system() == "Windows":  # Windows
+            subprocess.run(["explorer", path], check=True)
+        elif platform.system() == "Linux":  # Linux
+            subprocess.run(["xdg-open", path], check=True)
+        else:
+            print(f"Kein Mac? (du bist broke alter). Öffne '{path}' manuell.")
+            return False
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def close_folder_window(folder_path):
+    """Schließt Ordner-Fenster (nur macOS)"""
+    if platform.system() != "Darwin":
+        return  # Nur auf macOS verfügbar
+    
+    try:
+        images_path = os.path.abspath(folder_path)
+        applescript = f'''
+        tell application "Finder"
+            set imagePath to POSIX file "{images_path}" as alias
+            close (every window whose target is imagePath)
+        end tell
+        '''
+        subprocess.run(["osascript", "-e", applescript], check=True)
+        print(f"{folder_path} Ordner geschlossen.")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(f"Konnte {folder_path} nicht automatisch schließen.")
+
 # ---------- main ----------
 def main():
     if len(sys.argv) != 2:
         print("Benutze: pdf_to_text_gemini.py input.pdf")
         sys.exit(1)
     pdf_in  = sys.argv[1]
+
+    # Erst alte outcome-Dateien verschieben
+    move_old_outcome_files()
 
     now = datetime.datetime.now()
     out_txt = f"outcome_{now.strftime('%d.%m.%y_%H:%M')}.txt"
@@ -259,13 +327,27 @@ def main():
     print("Extrahiere Bilder...\n")
     imgs, img_placeholders = extract_images(pdf_in)
 
-    # Neue Pause für manuelle Bildauswahl
+    # Neue Pause für manuelle Bildauswahl mit automatischem Ordner öffnen
     if imgs:
         print(f"\n{len(imgs)} Bilder wurden in den Ordner 'images/' extrahiert.")
+        print("Öffne Ordner 'images/' im Finder...")
+        
+        # Automatisch Finder öffnen
+        try:
+            open_file_or_folder("images/")
+            print("Ordner wurde geöffnet.")
+        except Exception as e:
+            print(f"Konnte Ordner nicht öffnen: {e}")
+        
         print("Überprüfe jetzt die Bilder und lösche unerwünschte Dateien aus dem 'images/' Ordner.")
-        print("Du kannst den Finder öffnen mit: open images/")
         print("\nDrücke Enter, um fortzufahren, sobald du fertig bist...")
         input()
+        
+        # Schließe den images/ Ordner im Finder
+        try:
+            close_folder_window("images")
+        except Exception as e:
+            print(f"Fehler beim Schließen des Ordners: {e}")
         
         # Aktualisierte Bilderliste nach manueller Bearbeitung
         imgs = [img for img in imgs if os.path.exists(img)]
@@ -287,8 +369,8 @@ def main():
     final = merge_text(text_with_place, caps)
 
     # Optional: Nachformatierung 
-    print("Optimiere die Formatierung mit Gemini...\n")
-    final = format_ocr_gemini(final, model_name="gemini-2.5-flash")
+    #print("Optimiere die Formatierung mit Gemini...\n")
+    #final = format_ocr_gemini(final, model_name="gemini-2.5-flash")
 
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
     with open(out_txt, "w", encoding="utf-8") as f:
@@ -296,6 +378,14 @@ def main():
 
     print("Bereinige temporäre Dateien...\n")
     shutil.rmtree("images", ignore_errors=True)
+    
+    # Öffne die neue outcome-Datei automatisch
+    print(f"Öffne '{out_txt}' automatisch...")
+    try:
+        open_file_or_folder(out_txt)
+    except Exception as e:
+        print(f"⚠ Konnte '{out_txt}' nicht öffnen: {e}")
+    
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
 
 if __name__ == "__main__":
