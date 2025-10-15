@@ -293,8 +293,12 @@ def close_folder_window(folder_path):
         images_path = os.path.abspath(folder_path)
         applescript = f'''
         tell application "Finder"
-            set imagePath to POSIX file "{images_path}" as alias
-            close (every window whose target is imagePath)
+            try
+                set imagePath to POSIX file "{images_path}" as alias
+                close (every window whose target is imagePath)
+            on error
+                -- Fenster nicht gefunden oder bereits geschlossen
+            end try
         end tell
         '''
         subprocess.run(["osascript", "-e", applescript], check=True)
@@ -369,8 +373,8 @@ def main():
     final = merge_text(text_with_place, caps)
 
     # Optional: Nachformatierung 
-    #print("Optimiere die Formatierung mit Gemini...\n")
-    #final = format_ocr_gemini(final, model_name="gemini-2.5-flash")
+    print("Optimiere die Formatierung mit Gemini...\n")
+    final = format_ocr_gemini(final, model_name="gemini-2.5-flash")
 
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
     with open(out_txt, "w", encoding="utf-8") as f:
