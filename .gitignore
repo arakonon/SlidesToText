@@ -7,6 +7,7 @@ __pycache__/
 # Temporäre Dateien  
 images/
 outcome_*.txt
+Legacy Outcomes/
 
 # Test PDFs (optional)
 *.pdf
