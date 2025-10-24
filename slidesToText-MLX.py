@@ -14,6 +14,9 @@ import datetime
 import hashlib
 from collections import Counter
 import re
+import subprocess
+import glob
+import platform
 
 
 
@@ -51,7 +54,10 @@ def extract_images(pdf_path, img_folder="images"):
         else:
             for p, _ in paths:
                 print(f"Doppeltes Bild erkannt und entfernt: {os.path.basename(p)} \n")
-                os.remove(p)
+                try:
+                    os.remove(p)
+                except FileNotFoundError:
+                    pass
     return img_files, img_placeholders
 
 def caption_images(img_files, model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
@@ -71,19 +77,32 @@ def caption_images(img_files, model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4
     return captions
 
 def merge_text(text_with_place, captions):
+    """
+    Ersetzt Platzhalter durch Bildbeschreibungen und entfernt übrig gebliebene Platzhalter
+    """
     enriched = text_with_place
     for img in captions:
         placeholder = f"[IMG:{os.path.basename(img)}]"
-        enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}] \n")
+        enriched = enriched.replace(placeholder, f"BILD: [{captions[img]}]\n")
+    # Entferne alle übrig gebliebenen Platzhalter (für gelöschte Bilder)
+    enriched = re.sub(r'\[IMG:[^\]]+\]\n?', '', enriched)
     return enriched
 
-def insert_placeholders(text_layer_list, img_placeholders):
-    # text_layer_list: Liste mit Text pro Seite
-    # img_placeholders: Dict {seitennummer: [platzhalter, ...]}
+def insert_placeholders(text_layer_list, img_placeholders, existing_imgs):
+    """
+    Fügt nur Platzhalter für tatsächlich vorhandene Bilder ein
+    """
+    existing_basenames = {os.path.basename(img) for img in existing_imgs}
     result = []
     for i, text in enumerate(text_layer_list):
-        placeholders = "\n".join(img_placeholders.get(i, []))
-        result.append(text + ("\n" + placeholders if placeholders else ""))
+        filtered_placeholders = []
+        for placeholder in img_placeholders.get(i, []):
+            if placeholder.startswith("[IMG:") and placeholder.endswith("]"):
+                img_name = placeholder[5:-1]
+                if img_name in existing_basenames:
+                    filtered_placeholders.append(placeholder)
+        placeholders_text = "\n".join(filtered_placeholders)
+        result.append(text + ("\n" + placeholders_text if placeholders_text else ""))
     return "\n\n".join(result)
 
 def image_hash(image_path):
@@ -194,34 +213,141 @@ def mask_footer_line(line):
     return line.strip()
 
 def format_ocr(text: str) -> str:
-    # 4-Bit-Modell laden
-    model_format, tok = load_lm(
-        "mlx-community/Qwen1.5-1.8B-Chat-4bit",
-        tokenizer_config={
-            "eos_token": "<|endoftext|>",
-            "trust_remote_code": True,
-        },
-    )
-    # Systemnachricht für das LLM
-    system = ("Du bist ein Hilfsprogramm zur Textaufbereitung. Behalte den Inhalt, aber: entferne Zeilenumbrüche mitten im Satz, korrigiere Leerzeichen vor Satzzeichen, entferne doppelte oder unnötige Leerzeilen und achte auf sinnvolle Absätze, Ändere keine inhaltlichen Aussagen.\n")
-    messages = [
-        {system},
-        {"content": text.strip()}
-    ]
+    # Versuche zuerst den Fast‑Tokenizer (benötigt KEIN sentencepiece)
     try:
-        # Bevorzugte Chat-Vorlage des Tokenizers nutzen
-        prompt = tok.apply_chat_template(messages, add_generation_prompt=True)
-    except (AttributeError, ValueError):
-        # Fallback: einfach System + User‑Text hintereinander
+        model_format, tok = load_lm(
+            "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+            tokenizer_config={
+                "use_fast": True,
+                "trust_remote_code": True,
+            },
+        )
+    except Exception:
+        print("Hinweis: Fast-Tokenizer fehlgeschlagen. Versuche Slow-Tokenizer (benötigt 'sentencepiece').")
+        try:
+            import sentencepiece  # noqa: F401
+        except ImportError:
+            print("Fehlendes Paket: 'sentencepiece'. Installiere mit: pip install sentencepiece")
+        model_format, tok = load_lm(
+            "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+            tokenizer_config={
+                "use_fast": False,
+                "trust_remote_code": True,
+            },
+        )
+
+    system = (
+        "Du bist ein deutschsprachiger Texteditor. Behalte den Inhalt, aber: "
+        "entferne Zeilenumbrüche mitten im Satz, korrigiere Leerzeichen vor Satzzeichen, "
+        "entferne doppelte/unnötige Leerzeilen und strukturiere sinnvolle Absätze. "
+        "Ändere keine inhaltlichen Aussagen."
+    )
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": text.strip()},
+    ]
+
+    # Template anwenden, falls vorhanden, sonst Fallback-Prompt
+    try:
+        prompt = tok.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    except Exception:
         prompt = system + "\n\n" + text.strip() + "\n\n"
-    out = generate_lm(model_format, tok, prompt=prompt, max_tokens=len(text)//2)
-    return out.strip()
+
+    max_new = max(200, min(1200, len(text) // 2))
+    out = generate_lm(model_format, tok, prompt=prompt, max_tokens=max_new)
+    out = (out or "").strip()
+    # Fallback: Wenn das LLM nichts liefert, gib den Rohtext zurück
+    if not out:
+        print("Hinweis: LLM lieferte leeren Output – gebe unformatierten Text zurück.")
+        return text
+    return out
+
+
+def move_old_outcome_files():
+    """
+    Verschiebt alle bestehenden outcome_*.txt Dateien in den "Legacy Outcomes" Ordner
+    """
+    legacy_folder = "Legacy Outcomes"
+    os.makedirs(legacy_folder, exist_ok=True)
+    outcome_files = glob.glob("outcome_*.txt")
+    if outcome_files:
+        print(f"Verschiebe {len(outcome_files)} alte outcome-Datei(en) nach '{legacy_folder}/'...")
+        for old_file in outcome_files:
+            destination = os.path.join(legacy_folder, old_file)
+            if os.path.exists(destination):
+                name, ext = os.path.splitext(old_file)
+                timestamp = datetime.datetime.now().strftime('%H-%M-%S')
+                destination = os.path.join(legacy_folder, f"{name}_{timestamp}{ext}")
+            try:
+                shutil.move(old_file, destination)
+                print(f"{old_file} → {destination}")
+            except Exception as e:
+                print(f"Fehler beim Verschieben von {old_file}: {e}")
+        print()
+
+
+def open_file_or_folder(path):
+    """Öffnet Datei oder Ordner plattformspezifisch"""
+    try:
+        if platform.system() == "Darwin":  # macOS
+            subprocess.run(["open", path], check=True)
+        elif platform.system() == "Windows":
+            subprocess.run(["explorer", path], check=True)
+        elif platform.system() == "Linux":
+            subprocess.run(["xdg-open", path], check=True)
+        else:
+            print(f"Unbekanntes System. Öffne '{path}' manuell.")
+            return False
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def close_folder_window(folder_path):
+    """Schließt Ordner-Fenster (nur macOS). Gibt Anzahl geschlossener Fenster zurück."""
+    if platform.system() != "Darwin":
+        return 0
+    try:
+        abs_path = os.path.abspath(folder_path)
+        applescript = f'''
+        tell application "Finder"
+            try
+                set imagePath to POSIX file "{abs_path}" as alias
+                set matches to (every window whose target is imagePath)
+                set n to count of matches
+                repeat with w in matches
+                    try
+                        close w
+                    end try
+                end repeat
+                return n
+            on error errMsg number errNum
+                return 0
+            end try
+        end tell
+        '''
+        proc = subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True, text=True)
+        try:
+            return int(proc.stdout.strip()) if proc.stdout.strip() != '' else 0
+        except ValueError:
+            return 0
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return 0
 
 def main():
     if len(sys.argv) != 2:
         print("Benutze: pdf_to_text.py input.pdf")
         sys.exit(1)
     pdf_in  = sys.argv[1]
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+    # Alte outcome-Dateien aufräumen
+    move_old_outcome_files()
 
     # Erzeuge Dateinamen mit Datum und Uhrzeit
     now = datetime.datetime.now()
@@ -242,21 +368,54 @@ def main():
     print("Extrahiere Bilder...\n")
     imgs, img_placeholders = extract_images(pdf_in)
 
-    # 4. Platzhalter einfügen
+    # 3a. Ordner öffnen für manuelle Bildauswahl
+    if imgs:
+        print(f"\n{len(imgs)} Bilder wurden in den Ordner 'images/' extrahiert.")
+        print("Öffne Ordner 'images/' im Finder...")
+        try:
+            if open_file_or_folder("images/"):
+                print("Ordner wurde geöffnet.")
+        except Exception as e:
+            print(f"Konnte Ordner nicht öffnen: {e}")
+        print("Überprüfe jetzt die Bilder und lösche unerwünschte Dateien aus dem 'images/' Ordner.")
+        print("\nDrücke Enter, um fortzufahren, sobald du fertig bist...")
+        input()
+        closed = close_folder_window("images")
+        if closed > 0:
+            print("images/ Ordner-Fenster geschlossen.")
+        else:
+            print("Konnte images/ Finder-Fenster nicht automatisch schließen (evtl. bereits zu).")
+        # Aktualisierte Liste nach manueller Bearbeitung
+        imgs = [img for img in imgs if os.path.exists(img)]
+        print(f"{len(imgs)} Bilder werden an das VLM gesendet.\n")
+    else:
+        print("Keine Bilder gefunden.\n")
+
+    # 4. Platzhalter einfügen (nur für vorhandene Bilder)
     print("Füge Platzhalter für Bilder ein...\n")
-    text_with_place = insert_placeholders(raw_text, img_placeholders)
+    text_with_place = insert_placeholders(raw_text, img_placeholders, imgs)
 
     # 5. Semantische Bildbeschreibung
-    print("Beschreibe Bilder mit MLX-VLM (Qwen2.5)...\n")
+    print("Beschreibe Bilder mit MLX-VLM...\n")
     caps = caption_images(imgs)
 
     # 6. Zusammenführen
     print("Füge Text und Bildbeschreibungen zusammen...\n")
     final = merge_text(text_with_place, caps)
-    
+
+    # Debug / Sicherheitskopie vor LLM-Formatierung
+    raw_out = f"outcome_raw_{now.strftime('%d.%m.%y_%H:%M')}.txt"
+    try:
+        with open(raw_out, "w") as f:
+            f.write(final)
+        print(f"Rohtext vor LLM-Formatierung in '{raw_out}' gespeichert (Länge: {len(final)} Zeichen).\n")
+    except Exception as e:
+        print(f"Konnte Rohtext nicht speichern: {e}")
+
     # 7. Finalen Text durch ein LLM formatieren lassen
-    # print("Optimiere die Formatierung des finalen Texts mit MLX-LLM (Qwen1.5)...\n")
-    # final = format_ocr(final)
+    print("Optimiere die Formatierung des finalen Texts mit MLX-LLM (Mistral)...\n")
+    final = format_ocr(final)
+    print(f"Formatierte Textlänge: {len(final)} Zeichen.\n")
 
     # 8. Ausgabe
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
@@ -266,6 +425,13 @@ def main():
     # 9. Bild-Ordner löschen
     print("Bereinige temporäre Dateien...\n")
     shutil.rmtree("images", ignore_errors=True)
+
+    # 10. Ergebnisdatei öffnen (optional)
+    print(f"Öffne '{out_txt}' automatisch...")
+    try:
+        open_file_or_folder(out_txt)
+    except Exception as e:
+        print(f"⚠ Konnte '{out_txt}' nicht öffnen: {e}")
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
 
