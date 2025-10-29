@@ -216,7 +216,7 @@ def format_ocr(text: str) -> str:
     # Versuche zuerst den Fast‑Tokenizer (benötigt KEIN sentencepiece)
     try:
         model_format, tok = load_lm(
-            "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+            "mlx-community/Qwen2.5-3B-Instruct-4bit",
             tokenizer_config={
                 "use_fast": True,
                 "trust_remote_code": True,
@@ -413,7 +413,7 @@ def main():
         print(f"Konnte Rohtext nicht speichern: {e}")
 
     # 7. Finalen Text durch ein LLM formatieren lassen
-    print("Optimiere die Formatierung des finalen Texts mit MLX-LLM (Mistral)...\n")
+    print("Optimiere die Formatierung des finalen Texts mit MLX-LLM...\n")
     final = format_ocr(final)
     print(f"Formatierte Textlänge: {len(final)} Zeichen.\n")
 

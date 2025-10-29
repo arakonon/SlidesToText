@@ -235,7 +235,7 @@ def format_ocr_gemini(text, model_name="gemini-2.5-flash"):
     )
     prompt = f"{system}\n\n---\n{text.strip()}\n---\n"
     try:
-        resp = model.generate_content(prompt, request_options={"timeout": 120})
+        resp = model.generate_content(prompt, request_options={"timeout": 300})
         return (resp.text or "").strip()
     except Exception as e:
         return f"(Formatierungsfehler: {e})\n\n{text}"
