@@ -270,7 +270,7 @@ def format_ocr(text: str) -> str:
 
 def move_old_outcome_files():
     """
-    Verschiebt alle bestehenden outcome_*.txt Dateien in den "Legacy Outcomes" Ordner
+    Verschiebt alle bestehenden outcome_*.txt Dateien in den Legacy Outcomes Ordner
     """
     legacy_folder = "Legacy Outcomes"
     os.makedirs(legacy_folder, exist_ok=True)

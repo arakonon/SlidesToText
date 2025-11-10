@@ -1,0 +1,46 @@
+page10_1.jpeg:
+Das Bild ist eine schematische Darstellung eines Verfahrens zur Bewertung und Aufnahme von Medizinprodukten in das DigA-Verzeichnis. Es zeigt die verschiedenen Schritte und Entscheidungspunkte im Verfahren:
+
+1. **BFArM Beratungsverfahren**: Hier können Hersteller offene Fragestellungen klären und die erforderlichen Dokumente zusammenstellen.
+2. **Antragsvorbereitung**: Der Antrag wird über das bereitgestellte Online-Portal des BfArM eingereicht.
+3. **Bewertungsverfahren**: Innerhalb von 14 Tagen wird die Vollständigkeit der Unterlagen geprüft.
+4. **Aufnahme und ggf. Erprobung**: In zwei Teilen (Teil I und Teil II) wird die Prüfung durchgeführt:
+   - **Teil I**: Prüfung der allgemeinen Anforderungen wie Funktionalität, Sicherheit, Qualität und Betriebssicherheit sowie Bewertung des positiven Versorgungseffekts. Hierbei können Mehrezins-Nutzen oder Verfahrens- und Strukturverbesserungen berücksichtigt werden.
+
+page14_1.jpeg:
+Das Bild zeigt eine Smartphone-App namens "Kalmeda" mit der Überschrift "wirksame Hilfe bei Tinnitus". Die App bietet verschiedene Funktionen an, die durch Symbole und Texte dargestellt werden. Die Symbole und Texte sind:
+
+1. "Mein Übungsprogramm"
+2. "Meine Hilfen"
+3. "Meine Ziele"
+4. "Mein Fortschritt"
+
+Diese Elemente sind in einem blauen Hintergrund angeordnet.
+
+page15_2.jpeg:
+Das Bild zeigt eine Smartphone-App mit einer Benutzeroberfläche, die zur Aufzeichnung von Blutzuckerwerten, Mahlzeiten, Aktivitäten und mehr verwendet wird. Derzeit wird ein Eintrag bearbeitet, der auf den Zeitpunkt 27.05.2018, 19:00 Uhr datiert ist. Der Blutzuckerwert beträgt 150 mg/dL, die Kohlenhydratmenge 120 g. Es gibt auch Felder für die Aufzeichnung von Zutaten, Bolus-Werten für Essen und Korrektur, Fotos und den Namen des Essens (Pizza). Unten sind Symbole für verschiedene Mahlzeiten und Aktivitäten zu sehen.
+
+page16_2.jpeg:
+Das Bild zeigt eine digitale Benutzeroberfläche mit einem Smartphone, auf dem verschiedene Gesundheitsinformationen angezeigt werden. Der Hintergrund ist blau, und der Text ist in weißer Farbe gehalten. Oben auf dem Bildschirm steht "Verwalte deine Gesundheit". Unten auf dem Bildschirm sind verschiedene Kategorien zu sehen: "Allgemeine Informationen", "Persönliche Informationen", "Medikamente", "Allergien" und "Gesundheitsfaktoren". Jede Kategorie hat einen entsprechenden Symbol und einen Pfeil, der auf die Details der jeweiligen Kategorie zeigt.
+
+page16_4.jpeg:
+Das Bild zeigt eine schematische Darstellung eines menschlichen Körpers, der auf einem Smartphone-Bildschirm dargestellt wird. Der Fokus liegt auf dem Bereich des Bauches, wo ein blauer Kreis mit einem blauen Pfeil zeigt, dass die Schmerzen im Bereich oberhalb des Magens liegen. Oben auf dem Bildschirm steht in weißer Schrift auf blauem Hintergrund: "Erzähl Ada, was dich beunruhigt". Darunter steht: "Wo sind die Schmerzen?" und am unteren Rand: "Bereich oberhalb des Magens".
+
+page16_6.jpeg:
+Das Bild zeigt eine digitale Darstellung einer Gesundheits-App mit dem Titel "Verstehe deine Beschwerden". Es handelt sich um eine schematische Darstellung, die Informationen über die akute Gastritis gibt. Die App zeigt, dass es bei einem Mann namens Jonas, geboren im Jahr 1989, Bauchschmerzen gibt. Die akute Gastritis wird als Magenentzündung beschrieben und als eine Erkrankung, die normalerweise selbst behandelt werden kann. Es wird erwähnt, dass 6 von 10 Personen mit ähnlichen Symptomen diese Erkrankung haben. Die Symptome werden in einer Grafik dargestellt, die von Bauchschmerzen bis hin zu Appetitverlust und Gefühl eines aufgeblähten Bauches reicht.
+
+page17_1.jpeg:
+Das Bild zeigt eine Smartphone-Benutzeroberfläche mit einer App namens "Mein Mika". Auf der Oberseite sind die Uhrzeit (9:41) und die Netzwerk- und Batterie-Symbole zu sehen. Der Hauptteil des Bildschirms zeigt verschiedene Optionen in einem dunkelblauen Banner, darunter "Dokumentiere Dein Befinden", "Beobachte Deine Symptome", "Unternehme eine Themenreise" und "Lies die Mika-Einführung". Darunter befindet sich ein Abschnitt mit dem Titel "Themenreisen" und einer Überschrift "Ernährung bei Krebs". Ein kleines Bild einer Person, die eine Schüssel mit Lebensmitteln hält, ist ebenfalls zu sehen. Unten im Bild sind weitere Menüpunkte zu erkennen: "Mein Mika", "Check-Up", "Themenreisen" und "Entdecken".
+
+page24_1.png:
+Das Bild enthält einen Textbeitrag mit dem Titel "PREISVERHANDLUNG". Der Text fragt, ob eine DiGA mehr als 243 Euro kosten darf. Es wird erwähnt, dass die Frage, wie teuer eine App auf Rezept sein darf, zwischen Krankenkassen und Entwicklerunternehmen weiterhin ein Streitpunkt ist. Es wird auch erwähnt, dass bislang keine Einigung ohne Schiedsstelle erzielt wurde. Der Beitrag wird unterzeichnet von Lukas Hoffmann und datiert auf den 16.05.2022 um 07:22 Uhr.
+
+page24_2.png:
+Das Bild zeigt den Titel eines Positionspapiers mit dem Titel "Hersteller von „Apps auf Rezept“ wehren sich gegen Kritik der Kassen". Darunter steht: "Als zu teuer und medizinisch fragwürdig haben Krankenkassen digitale Gesundheitsanwendungen kritisiert. Nun reagieren die Hersteller." Der Autor des Positionspapiers ist Jürgen Klöckner. Unten im Bild sind die Daten "27.01.2021 - 16:50 Uhr", "Kommentieren" und "1 x geteilt" zu sehen.
+
+page24_3.png:
+Das Bild zeigt einen Artikeltitel in einer Zeitung oder einem Online-Portal. Der Titel lautet: "APP-ENTWICKLER KLÄGT Krankenkasse übergeht wohl Ärzte-Verordnung". Darunter steht: "Seit einigen Jahren entwickeln Start-ups Apps auf Rezept. Um die Einlösung der Rezeptcodes gibt es jetzt Streit." Der Autor des Artikels ist Lukas Hoffmann, und die Zeitungspublikation wurde am 11.05.2023 um 00:01 Uhr veröffentlicht. Es gibt Optionen zum Kommentieren und Teilen des Artikels.
+
+page24_4.png:
+Das Bild enthält einen Textbeitrag mit dem Titel "Ärzte werden bei DiGA noch schlecht eingebunden". Darunter steht: "Branchenmitglieder schätzen, dass das Potenzial einer DiGA so noch nicht ausgeschöpft wird. Frankreich zeigt sich hingegen offener für eine enge Verzahnung von Ärzten und Technologie." Der Beitrag wird von einer Person mit dem Namen Britta Rybicki verfasst. Unten im Bild sind die Zeitangaben "28.07.2022 - 08:26 Uhr" und Optionen zum Kommentieren und Teilen des Beitrags zu sehen.
+

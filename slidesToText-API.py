@@ -18,7 +18,7 @@ import platform
 load_dotenv()
 
 # Neu: Google AI Studio / Gemini
-import google.generativeai as genai
+import google.generativeai as genaia
 
 # ---------- PDF/Text Hilfsfunktionen (unverändert zu MLX-Version) ----------
 def extract_text_layer(pdf_path):
