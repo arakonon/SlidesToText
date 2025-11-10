@@ -18,7 +18,10 @@ import platform
 load_dotenv()
 
 # Neu: Google AI Studio / Gemini
-import google.generativeai as genaia
+try:
+    import google.generativeai as genai
+except ImportError:
+    raise ImportError("google-generativeai nicht installiert. Installiere mit: pip install google-generativeai")
 
 # ---------- PDF/Text Hilfsfunktionen (unverändert zu MLX-Version) ----------
 def extract_text_layer(pdf_path):
