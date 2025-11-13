@@ -224,6 +224,7 @@ def caption_images_gemini(img_files, model_name="gemini-2.5-flash"):
         except Exception as e:
             text = f"(Fehler bei der Bildbeschreibung: {e})"
         captions[img_path] = text
+       
         print(f"Bild {idx}/{len(img_files)} beschrieben: {os.path.basename(img_path)}")
     return captions
 

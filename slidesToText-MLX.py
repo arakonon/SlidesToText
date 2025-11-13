@@ -216,7 +216,7 @@ def format_ocr(text: str) -> str:
     # Versuche zuerst den Fast‑Tokenizer (benötigt KEIN sentencepiece)
     try:
         model_format, tok = load_lm(
-            "mlx-community/Qwen2.5-3B-Instruct-4bit",
+            "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
             tokenizer_config={
                 "use_fast": True,
                 "trust_remote_code": True,
@@ -258,7 +258,7 @@ def format_ocr(text: str) -> str:
     except Exception:
         prompt = system + "\n\n" + text.strip() + "\n\n"
 
-    max_new = max(200, min(1200, len(text) // 2))
+    max_new = max(400, min(6144, len(text)))
     out = generate_lm(model_format, tok, prompt=prompt, max_tokens=max_new)
     out = (out or "").strip()
     # Fallback: Wenn das LLM nichts liefert, gib den Rohtext zurück
