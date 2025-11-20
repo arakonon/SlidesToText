@@ -60,7 +60,7 @@ def extract_images(pdf_path, img_folder="images"):
                     pass
     return img_files, img_placeholders
 
-def caption_images(img_files, model_path="mlx-community/Qwen2.5-VL-7B-Instruct-4bit"):
+def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit"):
     print(f"{len(img_files)} Bilder werden beschrieben...\n")
     model, processor = load_vlm(model_path)
     cfg = load_config(model_path)
@@ -213,28 +213,31 @@ def mask_footer_line(line):
     return line.strip()
 
 def format_ocr(text: str) -> str:
-    # Versuche zuerst den Fast‑Tokenizer (benötigt KEIN sentencepiece)
+    # Versuche Qwen mit Fast-Tokenizer (benötigt KEIN sentencepiece).
+    # Wenn das Laden scheitert, wird abgebrochen und der unformatierte Text zurückgegeben.
     try:
         model_format, tok = load_lm(
-            "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+            "mlx-community/Qwen3-8B-4bit",
             tokenizer_config={
                 "use_fast": True,
                 "trust_remote_code": True,
             },
         )
-    except Exception:
-        print("Hinweis: Fast-Tokenizer fehlgeschlagen. Versuche Slow-Tokenizer (benötigt 'sentencepiece').")
-        try:
-            import sentencepiece  # noqa: F401
-        except ImportError:
-            print("Fehlendes Paket: 'sentencepiece'. Installiere mit: pip install sentencepiece")
-        model_format, tok = load_lm(
-            "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
-            tokenizer_config={
-                "use_fast": False,
-                "trust_remote_code": True,
-            },
-        )
+        # Qwen 3 hat einen großen Kontext, wir nutzen konservativ 32k
+        max_ctx_tokens = 32000
+        # Kontextbudget zwischen Eingabetext und generiertem Text aufteilen
+        reserve_for_system = 512
+        available = max_ctx_tokens - reserve_for_system
+        if available <= 0:
+            print("Warnung: Kontextbudget ist zu klein. Gebe unformatierten Text zurück.")
+            return text
+        # Etwa halbe-halbe: die Hälfte für Eingabe, die Hälfte für Ausgabe
+        max_user_tokens = available // 2
+        max_new_tokens = available - max_user_tokens
+    except Exception as e:
+        print("Fehler beim Laden von Qwen3-8B-4bit. Gebe unformatierten Text zurück.")
+        print(f"Detail: {e}")
+        return text
 
     system = (
         "Du bist ein deutschsprachiger Texteditor. Behalte den Inhalt, aber: "
@@ -243,29 +246,90 @@ def format_ocr(text: str) -> str:
         "Ändere keine inhaltlichen Aussagen."
     )
 
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": text.strip()},
-    ]
+    def run_chunk(chunk_text: str) -> str:
+        """Formatiert einen einzelnen Chunk mit dem LLM."""
+        if not chunk_text.strip():
+            return chunk_text
 
-    # Template anwenden, falls vorhanden, sonst Fallback-Prompt
-    try:
-        prompt = tok.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-    except Exception:
-        prompt = system + "\n\n" + text.strip() + "\n\n"
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": chunk_text.strip()},
+        ]
 
-    max_new = max(400, min(6144, len(text)))
-    out = generate_lm(model_format, tok, prompt=prompt, max_tokens=max_new)
-    out = (out or "").strip()
-    # Fallback: Wenn das LLM nichts liefert, gib den Rohtext zurück
-    if not out:
-        print("Hinweis: LLM lieferte leeren Output – gebe unformatierten Text zurück.")
+        # Template anwenden, falls vorhanden, sonst Fallback-Prompt
+        try:
+            prompt = tok.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        except Exception:
+            prompt = system + "\n\n" + chunk_text.strip() + "\n\n"
+
+        # Anzahl neuer Tokens pro Chunk begrenzen
+        # (groß genug, um den Text vollständig neu zu formatieren)
+        max_new = max_new_tokens
+
+        try:
+            out = generate_lm(model_format, tok, prompt=prompt, max_tokens=max_new)
+        except Exception as e:
+            print("Fehler bei der LLM-Generierung für einen Chunk. Gebe Chunk unverändert zurück.")
+            print(f"Detail: {e}")
+            return chunk_text
+        out = (out or "").strip()
+        # Fallback: Wenn das LLM nichts liefert, gib den Rohtext zurück
+        if not out:
+            print("Hinweis: LLM lieferte leeren Output für einen Chunk – gebe Chunk unverändert zurück.")
+            return chunk_text
+        # Entferne evtl. ausgegebenes Reasoning im <think>-Block und Antwort-Tags
+        if "<think>" in out and "</think>" in out:
+            try:
+                out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL)
+            except Exception:
+                # Falls das Regex aus irgendeinem Grund scheitert, ignorieren wir es
+                pass
+        # Optionale Entfernung von Antwort-Tags, falls das Modell <answer>...</answer> nutzt
+        out = out.replace("<answer>", "").replace("</answer>", "").strip()
+        return out
+
+    text = text.strip()
+    if not text:
         return text
-    return out
+
+    # Versuche, Token-basiert zu chunken, um den Kontext maximal auszunutzen.
+    chunks = []
+    try:
+        user_tokens = tok.encode(text)
+
+        if len(user_tokens) <= max_user_tokens:
+            # Passt komplett in einen Kontext → einmal durch das LLM schicken
+            return run_chunk(text)
+
+        # Sonst in mehrere Chunks aufteilen, die jeweils sicher in den Kontext passen
+        for start in range(0, len(user_tokens), max_user_tokens):
+            end = start + max_user_tokens
+            sub_ids = user_tokens[start:end]
+            sub_text = tok.decode(sub_ids)
+            chunks.append(sub_text)
+    except Exception:
+        # Wenn der Tokenizer hier Probleme macht, auf Zeichen-basierte Aufteilung zurückfallen
+        print("Hinweis: Konnte Tokenizer nicht für Chunking verwenden – weiche auf Zeichen-basierte Aufteilung aus.")
+        max_chars = 8000  # konservativer Wert, damit der Kontext sicher reicht
+        if len(text) <= max_chars:
+            return run_chunk(text)
+        for start in range(0, len(text), max_chars):
+            chunks.append(text[start:start + max_chars])
+
+    # Jetzt alle Chunks nacheinander durch das Modell schicken und wieder zusammensetzen
+    results = []
+    total_chunks = len(chunks)
+    for idx, chunk in enumerate(chunks, start=1):
+        print(f"Verarbeite Chunk {idx}/{total_chunks} (Länge: {len(chunk)} Zeichen)...")
+        formatted = run_chunk(chunk)
+        results.append(formatted)
+
+    # Mit Leerzeilen trennen, damit Absatzgrenzen zwischen den Chunks erhalten bleiben
+    return "\n\n".join(results)
 
 
 def move_old_outcome_files():
@@ -397,7 +461,10 @@ def main():
 
     # 5. Semantische Bildbeschreibung
     print("Beschreibe Bilder mit MLX-VLM...\n")
-    caps = caption_images(imgs)
+    if imgs:
+        caps = caption_images(imgs)
+    else:
+        caps = {}
 
     # 6. Zusammenführen
     print("Füge Text und Bildbeschreibungen zusammen...\n")
