@@ -217,7 +217,7 @@ def format_ocr(text: str) -> str:
     # Wenn das Laden scheitert, wird abgebrochen und der unformatierte Text zurückgegeben.
     try:
         model_format, tok = load_lm(
-            "mlx-community/Qwen3-8B-4bit",
+            "mlx-community/Qwen3-4B-4bit",
             tokenizer_config={
                 "use_fast": True,
                 "trust_remote_code": True,
