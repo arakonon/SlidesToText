@@ -45,19 +45,22 @@ def extract_images(pdf_path, img_folder="images"):
             h = image_hash(path)
             hash_to_paths[h].append((path, page_num))
 
-    # Nur eindeutige Bilder behalten
     for paths in hash_to_paths.values():
-        if len(paths) == 1:
-            path, page_num = paths[0]
-            img_files.append(path)
-            img_placeholders[page_num].append(f"[IMG:{os.path.basename(path)}]")
-        else:
+        # Ab wievielen Bilder, Bild entfernen <---------------------
+        if len(paths) >= 4:
             for p, _ in paths:
-                print(f"Doppeltes Bild erkannt und entfernt: {os.path.basename(p)} \n")
+                print(f"Doppeltes Bild erkannt (insgesamt {len(paths)} Vorkommen) und entfernt: {os.path.basename(p)}\n")
                 try:
                     os.remove(p)
                 except FileNotFoundError:
                     pass
+            continue
+        # Unterhalb der Löschschwelle nur ein Exemplar beschreiben, aber auf allen Seiten den gleichen Platzhalter setzen.
+        keep_path, _ = paths[0]
+        img_files.append(keep_path)
+        placeholder = f"[IMG:{os.path.basename(keep_path)}]"
+        for _, page_num in paths:
+            img_placeholders[page_num].append(placeholder)
     return img_files, img_placeholders
 
 def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit"):
