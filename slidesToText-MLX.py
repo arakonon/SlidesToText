@@ -220,7 +220,7 @@ def format_ocr(text: str) -> str:
     # Wenn das Laden scheitert, wird abgebrochen und der unformatierte Text zurückgegeben.
     try:
         model_format, tok = load_lm(
-            "mlx-community/Qwen3-4B-4bit",
+            "mlx-community/Qwen3-1.7B-4bit",
             tokenizer_config={
                 "use_fast": True,
                 "trust_remote_code": True,
@@ -236,17 +236,27 @@ def format_ocr(text: str) -> str:
             return text
         # Etwa halbe-halbe: die Hälfte für Eingabe, die Hälfte für Ausgabe
         max_user_tokens = available // 2
+        # Aggressiver chunken: hart deckeln, damit das Modell kleinere Stücke bekommt
+        max_user_tokens = min(max_user_tokens, 6000)
         max_new_tokens = available - max_user_tokens
+        # Cap, damit das Modell nicht endlos weitergeneriert
+        max_new_tokens = min(max_new_tokens, 4096)
     except Exception as e:
         print("Fehler beim Laden von Qwen3-8B-4bit. Gebe unformatierten Text zurück.")
         print(f"Detail: {e}")
         return text
 
     system = (
-        "Du bist ein deutschsprachiger Texteditor. Behalte den Inhalt, aber: "
-        "entferne Zeilenumbrüche mitten im Satz, korrigiere Leerzeichen vor Satzzeichen, "
-        "entferne doppelte/unnötige Leerzeilen und strukturiere sinnvolle Absätze. "
-        "Ändere keine inhaltlichen Aussagen."
+        "Du bist ein deutschsprachiger Texteditor. "
+        "Du musst die folgenden Formatierungen anwenden. "
+        "Gib den gesamten Text vollständig zurück. Nichts weglassen, nichts hinzufügen, nichts umsortieren. "
+        "Entferne Zeilenumbrüche mitten im Satz. "
+        "Korrigiere Leerzeichen vor Satzzeichen. "
+        "Entferne doppelte oder unnötige Leerzeilen. "
+        "Strukturiere in sinnvolle Absätze. "
+        "Entferne wiederholte Kopf- und Fußzeilen sowie Seitenzahlen. "
+        "Ändere keine inhaltlichen Aussagen oder Formulierungen. "
+        "Antworte ausschließlich mit dem formatierten Text."
     )
 
     def run_chunk(chunk_text: str) -> str:
@@ -274,7 +284,13 @@ def format_ocr(text: str) -> str:
         max_new = max_new_tokens
 
         try:
-            out = generate_lm(model_format, tok, prompt=prompt, max_tokens=max_new)
+            out = generate_lm(
+                model_format,
+                tok,
+                prompt=prompt,
+                max_tokens=max_new,
+                temperature=0.5,  # etwas freier, damit Formatierung greift
+            )
         except Exception as e:
             print("Fehler bei der LLM-Generierung für einen Chunk. Gebe Chunk unverändert zurück.")
             print(f"Detail: {e}")
@@ -284,15 +300,19 @@ def format_ocr(text: str) -> str:
         if not out:
             print("Hinweis: LLM lieferte leeren Output für einen Chunk – gebe Chunk unverändert zurück.")
             return chunk_text
-        # Entferne evtl. ausgegebenes Reasoning im <think>-Block und Antwort-Tags
-        if "<think>" in out and "</think>" in out:
-            try:
-                out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL)
-            except Exception:
-                # Falls das Regex aus irgendeinem Grund scheitert, ignorieren wir es
-                pass
+        # Entferne evtl. ausgegebenes Reasoning im <think>-Block (auch wenn kein </think> vorhanden)
+        try:
+            out = re.sub(r"<think>.*?(</think>|$)", "", out, flags=re.DOTALL)
+        except Exception:
+            # Falls das Regex aus irgendeinem Grund scheitert, ignorieren wir es
+            pass
         # Optionale Entfernung von Antwort-Tags, falls das Modell <answer>...</answer> nutzt
         out = out.replace("<answer>", "").replace("</answer>", "").strip()
+        # Warnungen bei starker Abweichung, aber keine automatische Ersetzung
+        if len(out) > len(chunk_text) * 2:
+            print("Warnung: LLM-Ausgabe ist viel länger als der Eingabetext.")
+        if len(out) < len(chunk_text) * 0.7:
+            print("Warnung: LLM-Ausgabe ist deutlich kürzer als der Eingabetext.")
         return out
 
     text = text.strip()
