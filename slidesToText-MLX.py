@@ -17,6 +17,8 @@ import re
 import subprocess
 import glob
 import platform
+import threading
+import time
 
 
 
@@ -63,13 +65,15 @@ def extract_images(pdf_path, img_folder="images"):
             img_placeholders[page_num].append(placeholder)
     return img_files, img_placeholders
 
-def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit"):
+def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit", set_phase_cb=None):
     print(f"{len(img_files)} Bilder werden beschrieben...\n")
     model, processor = load_vlm(model_path)
     cfg = load_config(model_path)
     bildNr = 0
     captions = {}
     for img in img_files:
+        if set_phase_cb:
+            set_phase_cb(f"Bilder {bildNr+1}/{len(img_files)}")
         pil_img = [Image.open(img).convert("RGB").resize((512, 512))]
         prompt = "Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin."
         prompt_fmt = apply_chat_template(processor, cfg, prompt, num_images=len(pil_img))
@@ -289,7 +293,6 @@ def format_ocr(text: str) -> str:
                 tok,
                 prompt=prompt,
                 max_tokens=max_new,
-                temperature=0.5,  # etwas freier, damit Formatierung greift
             )
         except Exception as e:
             print("Fehler bei der LLM-Generierung für einen Chunk. Gebe Chunk unverändert zurück.")
@@ -426,12 +429,103 @@ def close_folder_window(folder_path):
     except (subprocess.CalledProcessError, FileNotFoundError):
         return 0
 
+
+# ---------- xbar Handling ----------
+def ensure_xbar_running():
+    """
+    Startet xbar, falls es nicht läuft. Gibt True zurück, wenn xbar bereits lief,
+    sonst False (dann wurde es von uns gestartet).
+    """
+    if platform.system() != "Darwin":
+        return True  # auf Nicht-macOS nichts tun
+    try:
+        was_running = subprocess.run(
+            ["pgrep", "-x", "xbar"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode == 0
+    except Exception:
+        was_running = False
+    if not was_running:
+        try:
+            subprocess.run(["open", "-ga", "xbar"], check=False)
+        except Exception:
+            pass
+    return was_running
+
+
+def stop_xbar_if_started(was_running):
+    """
+    Beendet xbar nur, wenn wir es selbst gestartet haben.
+    """
+    if platform.system() != "Darwin":
+        return
+    if was_running:
+        return
+    try:
+        subprocess.run(
+            ["osascript", "-e", 'tell application "xbar" to quit'],
+            check=False,
+        )
+    except Exception:
+        pass
+
+
+# ---------- Status-Tracking (z. B. für xbar) ----------
+def start_status_timer(label="SlidesToText-MLX", interval=1):
+    """
+    Schreibt Status und verstrichene Zeit in /tmp/slidestotext_status.txt.
+    Liefert set_phase(text) und stop() zurück.
+    """
+    start_ts = time.time()
+    status = {"phase": "Start"}
+    stop_event = threading.Event()
+    status_file = "/tmp/slidestotext_status.txt"
+
+    def set_phase(text):
+        status["phase"] = text
+
+    def writer():
+        while not stop_event.is_set():
+            elapsed = int(time.time() - start_ts)
+            try:
+                with open(status_file, "w") as f:
+                    # Sehr kompakter Titel für xbar
+                    f.write(f"{elapsed}s · {status['phase']}\n")
+                    f.write("---\n")
+                    f.write(f"{status['phase']} · {elapsed}s\n")
+                # Leichtes Flush-Intervall
+            except Exception:
+                pass
+            time.sleep(interval)
+
+    t = threading.Thread(target=writer, daemon=True)
+    t.start()
+
+    def stop():
+        stop_event.set()
+        t.join(timeout=2)
+        elapsed = int(time.time() - start_ts)
+        try:
+            with open(status_file, "w") as f:
+                f.write(f"⏱ {elapsed}s · Fertig\n")
+                f.write("---\n")
+                f.write(f"Fertig · {elapsed}s\n")
+        except Exception:
+            pass
+
+    return set_phase, stop
+
 def main():
     if len(sys.argv) != 2:
         print("Benutze: pdf_to_text.py input.pdf")
         sys.exit(1)
     pdf_in  = sys.argv[1]
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+    was_running = ensure_xbar_running()
+    set_phase, stop_status = start_status_timer()
+    set_phase("Starte")
 
     # Alte outcome-Dateien aufräumen
     move_old_outcome_files()
@@ -442,10 +536,12 @@ def main():
 
     # 1. Text-Layer extrahieren
     print("Extrahiere Text-Layer...\n")
+    set_phase("Text-Layer extrahieren")
     raw_text = extract_text_layer(pdf_in)
 
     # 2. Formatiere Text-Layer
     print("Bereinige Text-Layer...\n")
+    set_phase("Text bereinigen")
     raw_text = remove_repeated_headers_auto(raw_text, min_count=5, max_header_lines=5)
     raw_text = remove_repeated_footers_auto(raw_text, min_count=5, max_footer_lines=5)
     raw_text = remove_multiple_blank_lines_per_page(raw_text)
@@ -453,6 +549,7 @@ def main():
     
     # 3. Bilder extrahieren
     print("Extrahiere Bilder...\n")
+    set_phase("Bilder")
     imgs, img_placeholders = extract_images(pdf_in)
 
     # 3a. Ordner öffnen für manuelle Bildauswahl
@@ -480,17 +577,20 @@ def main():
 
     # 4. Platzhalter einfügen (nur für vorhandene Bilder)
     print("Füge Platzhalter für Bilder ein...\n")
+    set_phase("Platzhalter")
     text_with_place = insert_placeholders(raw_text, img_placeholders, imgs)
 
     # 5. Semantische Bildbeschreibung
     print("Beschreibe Bilder mit MLX-VLM...\n")
     if imgs:
-        caps = caption_images(imgs)
+        set_phase("Bilder")
+        caps = caption_images(imgs, set_phase_cb=set_phase)
     else:
         caps = {}
 
     # 6. Zusammenführen
     print("Füge Text und Bildbeschreibungen zusammen...\n")
+    set_phase("Text")
     final = merge_text(text_with_place, caps)
 
     # Debug / Sicherheitskopie vor LLM-Formatierung
@@ -504,16 +604,19 @@ def main():
 
     # 7. Finalen Text durch ein LLM formatieren lassen
     print("Optimiere die Formatierung des finalen Texts mit MLX-LLM...\n")
+    set_phase("Formatieren")
     final = format_ocr(final)
     print(f"Formatierte Textlänge: {len(final)} Zeichen.\n")
 
     # 8. Ausgabe
     print(f"Schreibe angereicherten Text in '{out_txt}'...\n")
+    set_phase("Ergebnisdatei")
     with open(out_txt, "w") as f:
         f.write(final)
 
     # 9. Bild-Ordner löschen
     print("Bereinige temporäre Dateien...\n")
+    set_phase("Aufräumen")
     shutil.rmtree("images", ignore_errors=True)
 
     # 10. Ergebnisdatei öffnen (optional)
@@ -524,6 +627,9 @@ def main():
         print(f"⚠ Konnte '{out_txt}' nicht öffnen: {e}")
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
+    set_phase("Fertig")
+    stop_status()
+    stop_xbar_if_started(was_running)
 
 if __name__ == "__main__":
     main()

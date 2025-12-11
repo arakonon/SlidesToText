@@ -76,6 +76,23 @@ python3 slidesToText-API.py deine-folien.pdf
 
 ---
 
+## ⏱ Status in der Menüleiste (xbar)
+
+Optional kannst du den Fortschritt live in der macOS-Menüleiste sehen:
+
+1. xbar installieren: `brew install --cask xbar`
+2. Plugin ausführbar machen und verlinken:
+   ```bash
+   chmod +x "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh"
+   ln -sf "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh" \
+     "$HOME/Library/Application Support/xbar/plugins/slidestotext_status.1s.sh"
+   ```
+3. xbar “Refresh” klicken. Während das Skript läuft, schreibt es nach `/tmp/slidestotext_status.txt`; xbar zeigt dort Timer + Phase an.
+
+Die MLX-Version startet xbar bei Bedarf automatisch und schließt es danach wieder.
+
+---
+
 ## 🎯 Pro-Tipps
 
 - **Große PDFs?** Dauert ein paar Minuten - chill einfach ☕
