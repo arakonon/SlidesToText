@@ -19,6 +19,7 @@ import glob
 import platform
 import threading
 import time
+import csv
 
 
 
@@ -430,6 +431,125 @@ def close_folder_window(folder_path):
         return 0
 
 
+# ---------- Statistik/Schätzung ----------
+STATS_FILE = "processing_stats.csv"
+ETA_MIN_SECONDS = 1
+ETA_MAX_SECONDS = 6 * 3600  # 6 Stunden Hardcap
+OUTLIER_FACTOR = 3.0        # Faktor um Median, außerhalb dessen Werte ignoriert werden
+
+
+def load_stats(stats_path=STATS_FILE):
+    records = []
+    if not os.path.exists(stats_path):
+        return records
+    try:
+        with open(stats_path, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    records.append(
+                        {
+                            "chars": int(float(row.get("chars", 0) or 0)),
+                            "images": int(float(row.get("images", 0) or 0)),
+                            "duration_sec": float(row.get("duration_sec", 0) or 0),
+                        }
+                    )
+                except Exception:
+                    continue
+    except Exception as e:
+        print(f"Warnung: Konnte Statistikdatei nicht lesen ({e}).")
+    return records
+
+
+def append_stat(record, stats_path=STATS_FILE):
+    fieldnames = ["chars", "images", "duration_sec"]
+    try:
+        # Bestehende Daten einlesen und mit neuem Record erneut schreiben, damit das Header-Layout konsistent bleibt
+        history = load_stats(stats_path=stats_path)
+        history.append(record)
+        with open(stats_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in history:
+                writer.writerow(
+                    {
+                        "chars": r.get("chars", 0),
+                        "images": r.get("images", 0),
+                        "duration_sec": r.get("duration_sec", 0),
+                    }
+                )
+    except Exception as e:
+        print(f"Warnung: Konnte Statistik nicht schreiben ({e}).")
+
+
+def estimate_duration_from_history(history, chars, images):
+    """
+    Schätzt Laufzeit per linearer Regression (Dauer = a*Zeichen + b*Bilder + c),
+    fallback auf einfache Mittelwerte.
+    """
+    if not history:
+        return None
+
+    # Ausreißer filtern anhand Median
+    durations = [r.get("duration_sec", 0) for r in history if r.get("duration_sec", 0) > 0]
+    if not durations:
+        return None
+    filtered = history
+    if len(durations) >= 3:
+        med = np.median(durations)
+        lower = med / OUTLIER_FACTOR
+        upper = med * OUTLIER_FACTOR
+        filtered = [r for r in history if lower <= r.get("duration_sec", 0) <= upper and r.get("duration_sec", 0) > 0]
+        if not filtered:
+            filtered = history  # Fallback, falls alles rausgefiltert wurde
+    history = filtered
+
+    A = []
+    y = []
+    for r in history:
+        duration = r.get("duration_sec", 0)
+        if duration <= 0:
+            continue
+        A.append([r.get("chars", 0), r.get("images", 0), 1])
+        y.append(duration)
+
+    est = None
+    if len(A) >= 2:
+        try:
+            coeffs, _, _, _ = np.linalg.lstsq(
+                np.array(A, dtype=float), np.array(y, dtype=float), rcond=None
+            )
+            est = float(coeffs[0] * chars + coeffs[1] * images + coeffs[2])
+            if est <= 0:
+                est = None
+        except Exception:
+            est = None
+
+    if est is None:
+        total_chars = sum(r.get("chars", 0) for r in history)
+        total_images = sum(r.get("images", 0) for r in history)
+        total_dur = sum(r.get("duration_sec", 0) for r in history)
+        sec_per_char = (total_dur / total_chars) if total_chars > 0 else 0
+        sec_per_image = (total_dur / total_images) if total_images > 0 else 0
+        est = sec_per_char * chars + sec_per_image * images
+        if est <= 0:
+            return None
+    # ETA Grenzen anwenden
+    est = max(est, ETA_MIN_SECONDS)
+    est = min(est, ETA_MAX_SECONDS)
+    return est
+
+
+def clamp_eta(seconds):
+    try:
+        val = float(seconds)
+    except Exception:
+        return None
+    val = max(val, ETA_MIN_SECONDS)
+    val = min(val, ETA_MAX_SECONDS)
+    return val
+
+
 # ---------- xbar Handling ----------
 def ensure_xbar_running():
     """
@@ -472,28 +592,49 @@ def stop_xbar_if_started(was_running):
 
 
 # ---------- Status-Tracking (z. B. für xbar) ----------
-def start_status_timer(label="SlidesToText-MLX", interval=1):
+def start_status_timer(label="SlidesToText-MLX", interval=1, start_ts=None):
     """
-    Schreibt Status und verstrichene Zeit in /tmp/slidestotext_status.txt.
-    Liefert set_phase(text) und stop() zurück.
+    Schreibt Status, verstrichene Zeit und ETA in /tmp/slidestotext_status.txt.
+    Liefert set_phase(text), set_estimated_total(seconds), set_start_time(ts) und stop() zurück.
     """
-    start_ts = time.time()
-    status = {"phase": "Start"}
+    start_ts = start_ts or time.time()
+    status = {"phase": "Start", "est_total": None, "start_ts": start_ts}
     stop_event = threading.Event()
     status_file = "/tmp/slidestotext_status.txt"
 
     def set_phase(text):
         status["phase"] = text
 
+    def set_estimated_total(seconds):
+        if seconds is None:
+            status["est_total"] = None
+            return
+        try:
+            status["est_total"] = max(float(seconds), 0)
+        except Exception:
+            status["est_total"] = None
+
+    def set_start_time(ts):
+        try:
+            status["start_ts"] = float(ts)
+        except Exception:
+            pass
+
     def writer():
         while not stop_event.is_set():
-            elapsed = int(time.time() - start_ts)
+            elapsed = int(time.time() - status["start_ts"])
             try:
+                line1 = f"{status['phase']}"
+                remaining = None
+                if status["est_total"] is not None:
+                    remaining = max(int(status["est_total"] - elapsed), 0)
+                    line1 = f"{status['phase']} · ETA {remaining}s"
                 with open(status_file, "w") as f:
-                    # Sehr kompakter Titel für xbar
-                    f.write(f"{elapsed}s · {status['phase']}\n")
+                    f.write(f"{line1}\n")
                     f.write("---\n")
-                    f.write(f"{status['phase']} · {elapsed}s\n")
+                    f.write(f"{status['phase']}\n")
+                    if remaining is not None:
+                        f.write(f"Verbleibend ~{remaining}s (gesamt ~{int(status['est_total'])}s)\n")
                 # Leichtes Flush-Intervall
             except Exception:
                 pass
@@ -505,16 +646,16 @@ def start_status_timer(label="SlidesToText-MLX", interval=1):
     def stop():
         stop_event.set()
         t.join(timeout=2)
-        elapsed = int(time.time() - start_ts)
         try:
             with open(status_file, "w") as f:
-                f.write(f"⏱ {elapsed}s · Fertig\n")
+                f.write(f"⏱ Fertig\n")
                 f.write("---\n")
-                f.write(f"Fertig · {elapsed}s\n")
+                f.write("Fertig\n")
         except Exception:
             pass
 
-    return set_phase, stop
+    return set_phase, set_estimated_total, set_start_time, stop
+
 
 def main():
     if len(sys.argv) != 2:
@@ -523,8 +664,11 @@ def main():
     pdf_in  = sys.argv[1]
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
+    stats_history = load_stats()
+    script_start_ts = time.time()
+    processing_start_ts = None
     was_running = ensure_xbar_running()
-    set_phase, stop_status = start_status_timer()
+    set_phase, set_estimated_total, set_start_time, stop_status = start_status_timer(start_ts=script_start_ts)
     set_phase("Starte")
 
     # Alte outcome-Dateien aufräumen
@@ -580,13 +724,32 @@ def main():
     set_phase("Platzhalter")
     text_with_place = insert_placeholders(raw_text, img_placeholders, imgs)
 
+    # 4a. Erste Laufzeitschätzung basierend auf Historie
+    char_est = len(text_with_place)
+    image_count = len(imgs)
+    estimated_duration = estimate_duration_from_history(stats_history, char_est, image_count)
+    if estimated_duration:
+        est_total = clamp_eta(estimated_duration)
+        set_estimated_total(est_total)
+        print(f"Geschätzte Gesamtdauer: ~{int(est_total)}s (Zeichen: {char_est}, Bilder: {image_count}).\n")
+    else:
+        print("Keine belastbare Laufzeitschätzung möglich (zu wenig Daten).\n")
+
     # 5. Semantische Bildbeschreibung
     print("Beschreibe Bilder mit MLX-VLM...\n")
+    processing_start_ts = time.time()
+    set_start_time(processing_start_ts)
     if imgs:
         set_phase("Bilder")
         caps = caption_images(imgs, set_phase_cb=set_phase)
     else:
         caps = {}
+
+    # Zwischen-Update der ETA nach Bildbeschreibung (falls Schätzung vorhanden)
+    if estimated_duration:
+        elapsed = time.time() - (processing_start_ts or script_start_ts)
+        est_total = clamp_eta(max(estimated_duration, elapsed + ETA_MIN_SECONDS))
+        set_estimated_total(est_total)
 
     # 6. Zusammenführen
     print("Füge Text und Bildbeschreibungen zusammen...\n")
@@ -628,6 +791,18 @@ def main():
 
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
     set_phase("Fertig")
+    duration = time.time() - (processing_start_ts or script_start_ts)
+    try:
+        append_stat(
+            {
+                "chars": len(final),
+                "images": len(imgs),
+                "duration_sec": round(duration, 2),
+            }
+        )
+        print(f"Statistik aktualisiert in '{STATS_FILE}'.")
+    except Exception as e:
+        print(f"Warnung: Statistik konnte nicht gespeichert werden ({e}).")
     stop_status()
     stop_xbar_if_started(was_running)
 
