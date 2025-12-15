@@ -1,120 +1,41 @@
-# 🎯 SlidesToText
+# SlidesToText
+PDF rein, bereinigter Text raus – inkl. KI-Bildbeschreibungen.
 
-**Verwandle deine PDF-Folien in intelligenten Text - automatisch!** 
+- API: `slidesToText-API.py` (Google Gemini, läuft überall)
+- MLX: `slidesToText-MLX.py` (lokal auf Apple Silicon)
 
-Extrahiert Text, beschreibt Bilder mit KI und räumt alles auf. Zwei Versionen verfügbar:
-
-- 🌐 **API** (`slidesToText-API.py`) - Google Gemini (funktioniert überall)
-- 🏠 **MLX** (`slidesToText-MLX.py`) - Lokal auf Apple Silicon
-
----
-
-## 🚀 Quick Start
-
+## Quick Start
 ```bash
-# Repo klonen
 git clone <REPO-URL> && cd SlidesToText
-
-# Python-Umgebung einrichten
 python3 -m venv venv && source venv/bin/activate
-
-# Abhängigkeiten installieren (wähle eine Version)
-pip install -r requirements-API.txt    # Für Google Gemini
-pip install -r requirements-MLX.txt    # Für Apple Silicon
-
-# Los geht's!
+pip install -r requirements-API.txt    # oder: requirements-MLX.txt
 python3 slidesToText-API.py deine-folien.pdf
 ```
 
----
-
-## 🔑 API Setup (nur für API-Version)
-
-1. Hole dir einen [Google AI Studio](https://aistudio.google.com/) API Key
-2. `cp .env.example .env` 
-3. Trage deinen Key in die `.env` ein
-
-**Oder** setze einfach: `export GOOGLE_API_KEY="dein-key"`
-
----
-
-## ✨ Was passiert?
-
-1. **📄 Text rausziehen** - Extrahiert alles aus dem PDF
-2. **🧹 Aufräumen** - Entfernt Kopfzeilen, Fußzeilen, doppelte Zeilen
-3. **🖼️ Bilder finden** - Sammelt alle Bilder (ignoriert Duplikate)
-4. **🤖 KI beschreibt** - Jedes Bild wird intelligent beschrieben
-5. **📝 Zusammenfügen** - Text + Bildbeschreibungen = fertig!
-6. **🎉 Auto-öffnen** - Deine `outcome_DD.MM.YY_HH:MM.txt` öffnet sich
-
-### 🎮 Interaktiv (API-Version)
-- Ordner öffnet sich automatisch → lösche ungewollte Bilder → Enter drücken → fertig!
-
----
-
-## 🥊 API vs MLX
-
-| | 🌐 API | 🏠 MLX |
-|---|---|---|
-| **Wo läuft's?** | Überall | Nur Apple Silicon |
-| **Internet?** | Ja | Nein |
-| **Kosten?** | ~Cents pro PDF | Einmalig Hardware |
-| **Speed** | 🚀 | 🐌 |
-| **Privatsphäre** | Google sieht's | 100% lokal |
-
----
-
-## 🛠️ Troubleshooting
-
-**💥 Import Error?** → `pip install -r requirements-XXX.txt`
-
-**🔑 API Key Error?** → Check deine `.env` Datei
-
-**🧠 Out of Memory (MLX)?** → Kleinere PDFs oder weniger Bilder
-
-**🌍 Netzwerk Error?** → Internet-Verbindung prüfen
-
----
-
-## ⏱ Status in der Menüleiste (xbar)
-
-Optional kannst du den Fortschritt live in der macOS-Menüleiste sehen:
-
-1. xbar installieren: `brew install --cask xbar`
-2. Plugin ausführbar machen und verlinken:
-   ```bash
-   chmod +x "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh"
-   ln -sf "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh" \
-     "$HOME/Library/Application Support/xbar/plugins/slidestotext_status.1s.sh"
-   ```
-3. xbar “Refresh” klicken. Während das Skript läuft, schreibt es nach `/tmp/slidestotext_status.txt`; xbar zeigt dort Timer + Phase an.
-
-Die MLX-Version startet xbar bei Bedarf automatisch und schließt es danach wieder.
-
----
-
-## 🎯 Pro-Tipps
-
-- **Große PDFs?** Dauert ein paar Minuten - chill einfach ☕
-- **Viele gleiche Logos?** Werden automatisch ignoriert 
-- **Schlechte Bilder?** Lösch sie einfach aus dem `images/` Ordner
-- **Alte Outputs?** Landen automatisch in `Legacy Outcomes/`
-
----
-
-## 📁 Was entsteht?
-
-```
-📂 SlidesToText/
-├── 📄 outcome_15.10.25_11:16.txt    ← Dein fertiger Text
-├── 📁 Legacy Outcomes/              ← Alle alten Versionen
-└── 🔐 .env                         ← Dein API Key
+## API Key (nur API)
+```bash
+cp .env.example .env
+echo 'GOOGLE_API_KEY=dein-key' >> .env   # oder: export GOOGLE_API_KEY=dein-key
 ```
 
----
+## Ablauf
+1) Text extrahieren und säubern (Kopf/Fußzeilen, Duplikate)  
+2) Bilder finden, Duplikate entfernen  
+3) KI beschreibt die Bilder  
+4) Text + Bildbeschreibungen zusammenführen → `outcome_<Datum>_<Zeit>.txt`  
+API-Modus: `images/` öffnet sich, ungewollte Bilder löschen, Enter drücken.
 
-**Made with ❤️ by Konrad Czernohous • 2025**
+## xbar-Status (optional, macOS)
+```bash
+chmod +x "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh"
+ln -sf "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh" \
+  "$HOME/Library/Application Support/xbar/plugins/slidestotext_status.1s.sh"
+```
+Dann xbar Refresh; während des Laufs steht der Status in `/tmp/slidestotext_status.txt`.
 
----
+## Tipps
+- Viele gleiche Logos? Werden automatisch ignoriert.
+- Schlechte Bilder? In `images/` löschen, dann Enter.
+- Alte Ergebnisse landen in `Legacy Outcomes/`.
 
-*🤖 Dieses README wurde mit KI generiert und ist cooler als deine Folien*
+Made by Konrad Czernohous • 2025
