@@ -17,3 +17,6 @@ Legacy Outcomes/
 
 # macOS
 .DS_Store
+
+# Statistik
+processing_stats.csv
