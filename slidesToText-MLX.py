@@ -447,11 +447,17 @@ def load_stats(stats_path=STATS_FILE):
             reader = csv.DictReader(f)
             for row in reader:
                 try:
+                    est_val = row.get("estimated_sec", "")
+                    delta_val = row.get("delta_sec", "")
+                    est_num = float(est_val) if (est_val not in (None, "",)) else None
+                    delta_num = float(delta_val) if (delta_val not in (None, "",)) else None
                     records.append(
                         {
                             "chars": int(float(row.get("chars", 0) or 0)),
                             "images": int(float(row.get("images", 0) or 0)),
                             "duration_sec": float(row.get("duration_sec", 0) or 0),
+                            "estimated_sec": est_num,
+                            "delta_sec": delta_num,
                         }
                     )
                 except Exception:
@@ -462,7 +468,7 @@ def load_stats(stats_path=STATS_FILE):
 
 
 def append_stat(record, stats_path=STATS_FILE):
-    fieldnames = ["chars", "images", "duration_sec"]
+    fieldnames = ["chars", "images", "duration_sec", "estimated_sec", "delta_sec"]
     try:
         # Bestehende Daten einlesen und mit neuem Record erneut schreiben, damit das Header-Layout konsistent bleibt
         history = load_stats(stats_path=stats_path)
@@ -471,15 +477,47 @@ def append_stat(record, stats_path=STATS_FILE):
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for r in history:
+                def fmt(v):
+                    return "" if v is None else v
                 writer.writerow(
                     {
                         "chars": r.get("chars", 0),
                         "images": r.get("images", 0),
                         "duration_sec": r.get("duration_sec", 0),
+                        "estimated_sec": fmt(r.get("estimated_sec")),
+                        "delta_sec": fmt(r.get("delta_sec")),
                     }
                 )
     except Exception as e:
         print(f"Warnung: Konnte Statistik nicht schreiben ({e}).")
+
+
+def compute_eta_accuracy(history, window=6):
+    """
+    Liefert die mittlere ETA-Genauigkeit (%) der letzten `window` Läufe:
+    100 * (1 - |ETA - Dauer| / Dauer), auf 0..100 begrenzt.
+    """
+    usable = [
+        r for r in history
+        if r.get("duration_sec", 0) > 0 and r.get("estimated_sec") not in (None, "")
+    ]
+    if not usable:
+        return None
+    usable = usable[-window:]
+    acc_vals = []
+    for r in usable:
+        dur = r.get("duration_sec", 0)
+        est = r.get("estimated_sec", None)
+        if dur <= 0 or est is None:
+            continue
+        try:
+            acc = 1 - abs(float(est) - float(dur)) / float(dur)
+            acc_vals.append(max(0.0, min(acc, 1.0)))
+        except Exception:
+            continue
+    if not acc_vals:
+        return None
+    return round(sum(acc_vals) / len(acc_vals) * 100, 1)
 
 
 def estimate_duration_from_history(history, chars, images):
@@ -627,7 +665,7 @@ def start_status_timer(label="SlidesToText-MLX", interval=1, start_ts=None):
                 line1 = f"{status['phase']}"
                 remaining = None
                 if status["est_total"] is not None:
-                    remaining = max(int(status["est_total"] - elapsed), 0)
+                    remaining = int(status["est_total"] - elapsed)  # darf ins Minus laufen
                     line1 = f"{status['phase']} · ETA {remaining}s"
                 with open(status_file, "w") as f:
                     f.write(f"{line1}\n")
@@ -667,6 +705,7 @@ def main():
     stats_history = load_stats()
     script_start_ts = time.time()
     processing_start_ts = None
+    est_total_in_use = None
     was_running = ensure_xbar_running()
     set_phase, set_estimated_total, set_start_time, stop_status = start_status_timer(start_ts=script_start_ts)
     set_phase("Starte")
@@ -728,8 +767,12 @@ def main():
     char_est = len(text_with_place)
     image_count = len(imgs)
     estimated_duration = estimate_duration_from_history(stats_history, char_est, image_count)
+    acc_percent = compute_eta_accuracy(stats_history, window=6)
+    if acc_percent is not None:
+        print(f"ETA-Genauigkeit (letzte 6 Läufe): ~{acc_percent}%")
     if estimated_duration:
         est_total = clamp_eta(estimated_duration)
+        est_total_in_use = est_total
         set_estimated_total(est_total)
         print(f"Geschätzte Gesamtdauer: ~{int(est_total)}s (Zeichen: {char_est}, Bilder: {image_count}).\n")
     else:
@@ -749,6 +792,7 @@ def main():
     if estimated_duration:
         elapsed = time.time() - (processing_start_ts or script_start_ts)
         est_total = clamp_eta(max(estimated_duration, elapsed + ETA_MIN_SECONDS))
+        est_total_in_use = est_total
         set_estimated_total(est_total)
 
     # 6. Zusammenführen
@@ -792,12 +836,15 @@ def main():
     print(f"Fertig! Datei '{out_txt}' enthält den angereicherten Text.")
     set_phase("Fertig")
     duration = time.time() - (processing_start_ts or script_start_ts)
+    delta_sec = round(duration - est_total_in_use, 2) if est_total_in_use is not None else None
     try:
         append_stat(
             {
                 "chars": len(final),
                 "images": len(imgs),
                 "duration_sec": round(duration, 2),
+                "estimated_sec": est_total_in_use if est_total_in_use is not None else "",
+                "delta_sec": delta_sec if delta_sec is not None else "",
             }
         )
         print(f"Statistik aktualisiert in '{STATS_FILE}'.")
