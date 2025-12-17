@@ -315,9 +315,9 @@ def format_ocr(text: str) -> str:
         out = out.replace("<answer>", "").replace("</answer>", "").strip()
         # Warnungen bei starker Abweichung, aber keine automatische Ersetzung
         if len(out) > len(chunk_text) * 2:
-            print("Warnung: LLM-Ausgabe ist viel länger als der Eingabetext.")
+            print("\033[91mWarnung: LLM-Ausgabe ist viel länger als der Eingabetext.\033[0m")
         if len(out) < len(chunk_text) * 0.7:
-            print("Warnung: LLM-Ausgabe ist deutlich kürzer als der Eingabetext.")
+            print("\033[91mWarnung: LLM-Ausgabe ist deutlich kürzer als der Eingabetext.\033[0m")
         return out
 
     text = text.strip()
