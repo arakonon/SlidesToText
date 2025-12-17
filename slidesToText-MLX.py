@@ -465,9 +465,11 @@ def set_low_power_mode_state(enable):
     if platform.system() != "Darwin":
         return False
     target = "1" if enable else "0"
+    # Reihenfolge: sudo (NOPASSWD-Regel kann greifen), plain pmset, dann AppleScript mit Admin-Prompt.
     commands = [
-        ["pmset", "-a", "lowpowermode", target],
-        ["osascript", "-e", f'do shell script "pmset -a lowpowermode {target}" with administrator privileges'],
+        ["sudo", "-n", "/usr/bin/pmset", "-a", "lowpowermode", target],
+        ["/usr/bin/pmset", "-a", "lowpowermode", target],
+        ["osascript", "-e", f'do shell script "/usr/bin/pmset -a lowpowermode {target}" with administrator privileges'],
     ]
     for cmd in commands:
         try:

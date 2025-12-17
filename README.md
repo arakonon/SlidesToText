@@ -25,6 +25,19 @@ echo 'GOOGLE_API_KEY=dein-key' >> .env   # oder: export GOOGLE_API_KEY=dein-key
 4) Text + Bildbeschreibungen zusammenführen → `outcome_<Datum>_<Zeit>.txt`  
 API-Modus: `images/` öffnet sich, ungewollte Bilder löschen, Enter drücken.
 
+## Low-Power-Mode (macOS)
+- Default: `--low-power auto` → erkennt aktiven Batteriesparmodus, schaltet ihn für die Laufzeit aus und stellt ihn danach wieder her. Wenn er aus ist, passiert nichts.  
+- Weitere Modi: `keep` (nicht anfassen), `on`, `off`. Mit `--restore-low-power` kannst du in den Modi `on/off` den ursprünglichen Zustand zurückholen.
+- Beispiel:  
+  ```bash
+  python3 slidesToText-MLX.py --low-power auto dein.pdf
+  ```
+- Keine Passwortabfrage gewuenscht? In `/etc/sudoers` (per `sudo visudo`) z. B.:  
+  ```
+  NUTZERNAME ALL=(root) NOPASSWD: /usr/bin/pmset -a lowpowermode 0, /usr/bin/pmset -a lowpowermode 1
+  ```
+  (Nutzername anpassen.)
+
 ## xbar-Status (optional, macOS)
 ```bash
 chmod +x "/Users/konrad/Desktop/Programmier Stuff/SlidesToText/slidestotext_status.1s.sh"
