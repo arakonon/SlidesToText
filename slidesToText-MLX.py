@@ -244,9 +244,8 @@ def format_ocr(text: str) -> str:
         max_user_tokens = available // 2
         # Aggressiver chunken: hart deckeln, damit das Modell kleinere Stücke bekommt
         max_user_tokens = min(max_user_tokens, 6000)
-        max_new_tokens = available - max_user_tokens
-        # Cap, damit das Modell nicht endlos weitergeneriert
-        max_new_tokens = min(max_new_tokens, 4096)
+        # Ausgabe sollte mindestens so lang wie Eingabe sein dürfen + Puffer
+        max_new_tokens = max_user_tokens + 500
     except Exception as e:
         print("Fehler beim Laden von Qwen3-8B-4bit. Gebe unformatierten Text zurück.")
         print(f"Detail: {e}")
@@ -313,6 +312,23 @@ def format_ocr(text: str) -> str:
             pass
         # Optionale Entfernung von Antwort-Tags, falls das Modell <answer>...</answer> nutzt
         out = out.replace("<answer>", "").replace("</answer>", "").strip()
+        
+        # Prüfe auf Repetition (wiederholte Zeichenketten, typisches LLM-Fehlverhalten)
+        def detect_repetition(text, min_pattern_len=3, min_repeats=10):
+            """Erkennt repetitive Muster wie 'QYXQYXQYX...' oder 'abcabcabc...'"""
+            for pattern_len in range(min_pattern_len, 20):
+                # Suche nach Mustern, die sich mindestens min_repeats mal wiederholen
+                pattern = r'(.{' + str(pattern_len) + r'})\1{' + str(min_repeats-1) + r',}'
+                match = re.search(pattern, text)
+                if match:
+                    return True, match.group(1)
+            return False, None
+        
+        has_repetition, repeated_pattern = detect_repetition(out)
+        if has_repetition:
+            print(f"\033[91mWarnung: LLM-Ausgabe enthält Repetition (Muster: '{repeated_pattern[:20]}...'). Gebe Rohtext zurück.\033[0m")
+            return chunk_text
+        
         # Warnungen bei starker Abweichung, aber keine automatische Ersetzung
         if len(out) > len(chunk_text) * 2:
             print("\033[91mWarnung: LLM-Ausgabe ist viel länger als der Eingabetext.\033[0m")
