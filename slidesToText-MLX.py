@@ -23,6 +23,23 @@ import time
 import csv
 
 
+MODEL_CONFIGS = {
+    "qwen3": {
+        "vlm_model":      "mlx-community/Qwen3-VL-8B-Instruct-4bit",
+        "lm_model":       "mlx-community/Qwen3-1.7B-4bit",
+        "img_size":       (512, 512),
+        "max_ctx_tokens": 32000,
+        "label":          "Qwen3 (VLM 8B + LM 1.7B)",
+    },
+    "gemma4": {
+        "vlm_model":      "mlx-community/gemma-4-26b-a4b-it-4bit",
+        "lm_model":       "mlx-community/gemma-4-26b-a4b-it-4bit",  # via mlx_vlm-Backend
+        "img_size":       (896, 896),
+        "max_ctx_tokens": 128000,
+        "label":          "Gemma 4 26B (Q4) – VLM + LM",
+    },
+}
+
 
 def extract_text_layer(pdf_path):
     doc = fitz.open(pdf_path)
@@ -67,7 +84,8 @@ def extract_images(pdf_path, img_folder="images"):
             img_placeholders[page_num].append(placeholder)
     return img_files, img_placeholders
 
-def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit", set_phase_cb=None):
+def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bit",
+                   img_size=(512, 512), set_phase_cb=None):
     print(f"{len(img_files)} Bilder werden beschrieben...\n")
     model, processor = load_vlm(model_path)
     cfg = load_config(model_path)
@@ -76,7 +94,7 @@ def caption_images(img_files, model_path="mlx-community/Qwen3-VL-8B-Instruct-4bi
     for img in img_files:
         if set_phase_cb:
             set_phase_cb(f"Bilder {bildNr+1}/{len(img_files)}")
-        pil_img = [Image.open(img).convert("RGB").resize((512, 512))]
+        pil_img = [Image.open(img).convert("RGB").resize(img_size)]
         prompt = "Beschreibe dieses Bild auf Deutsch. Wenn es sich um eine Fotografie oder Szene handelt, beschreibe in maximal 2 kurzen Sätzen. Wenn es sich um ein Diagramm, eine Skizze oder eine schematische Darstellung handelt, beschreibe das Bild sehr genau und interpretiere es. Wenn das Bild nur Text enthält, gib nur den Text wieder. Wenn Teile des Bildes nicht erkennbar sind, weise darauf hin."
         prompt_fmt = apply_chat_template(processor, cfg, prompt, num_images=len(pil_img))
         cap = generate_vlm(model, processor, prompt_fmt, pil_img, verbose=False)
@@ -221,19 +239,25 @@ def mask_footer_line(line):
     line = re.sub(r'\d+', '', line)  # Alle Zahlen
     return line.strip()
 
-def format_ocr(text: str) -> str:
-    # Versuche Qwen mit Fast-Tokenizer (benötigt KEIN sentencepiece).
-    # Wenn das Laden scheitert, wird abgebrochen und der unformatierte Text zurückgegeben.
+def format_ocr(text: str,
+               lm_model: str = "mlx-community/Qwen3-1.7B-4bit",
+               max_ctx_tokens: int = 32000) -> str:
+    # mlx_lm kennt Gemma 4 noch nicht – in dem Fall mlx_vlm als Fallback nutzen.
+    use_vlm_backend = "gemma-4" in lm_model
+
     try:
-        model_format, tok = load_lm(
-            "mlx-community/Qwen3-1.7B-4bit",
-            tokenizer_config={
-                "use_fast": True,
-                "trust_remote_code": True,
-            },
-        )
-        # Qwen 3 hat einen großen Kontext, wir nutzen konservativ 32k
-        max_ctx_tokens = 32000
+        if use_vlm_backend:
+            model_format, tok = load_vlm(lm_model)
+            vlm_cfg = load_config(lm_model)
+        else:
+            model_format, tok = load_lm(
+                lm_model,
+                tokenizer_config={
+                    "use_fast": True,
+                    "trust_remote_code": True,
+                },
+            )
+        # Kontext-Limit je nach gewähltem Modell (Qwen3: 32k, Gemma 4: 128k)
         # Kontextbudget zwischen Eingabetext und generiertem Text aufteilen
         reserve_for_system = 512
         available = max_ctx_tokens - reserve_for_system
@@ -247,13 +271,13 @@ def format_ocr(text: str) -> str:
         # Ausgabe sollte mindestens so lang wie Eingabe sein dürfen + Puffer
         max_new_tokens = max_user_tokens + 500
     except Exception as e:
-        print("Fehler beim Laden von Qwen3-8B-4bit. Gebe unformatierten Text zurück.")
+        print(f"Fehler beim Laden des LM-Modells ({lm_model}). Gebe unformatierten Text zurück.")
         print(f"Detail: {e}")
         return text
 
     system = (
-        "Du bist ein deutschsprachiger Texteditor. "
-        "Du musst die folgenden Formatierungen anwenden. "
+        "Du bist ein stupider Texteditor. "
+        "Du musst die folgenden Formatierungen anwenden: "
         "Gib den gesamten Text vollständig zurück. Nichts weglassen, nichts hinzufügen, nichts umsortieren. "
         "Entferne Zeilenumbrüche mitten im Satz. "
         "Korrigiere Leerzeichen vor Satzzeichen. "
@@ -261,6 +285,7 @@ def format_ocr(text: str) -> str:
         "Strukturiere in sinnvolle Absätze. "
         "Entferne wiederholte Kopf- und Fußzeilen sowie Seitenzahlen. "
         "Ändere keine inhaltlichen Aussagen oder Formulierungen. "
+        "Füge keine Kommentare und Anmerkungen deinerseits ein"
         "Antworte ausschließlich mit dem formatierten Text."
     )
 
@@ -274,27 +299,31 @@ def format_ocr(text: str) -> str:
             {"role": "user", "content": chunk_text.strip()},
         ]
 
-        # Template anwenden, falls vorhanden, sonst Fallback-Prompt
-        try:
-            prompt = tok.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-        except Exception:
-            prompt = system + "\n\n" + chunk_text.strip() + "\n\n"
-
         # Anzahl neuer Tokens pro Chunk begrenzen
-        # (groß genug, um den Text vollständig neu zu formatieren)
         max_new = max_new_tokens
 
         try:
-            out = generate_lm(
-                model_format,
-                tok,
-                prompt=prompt,
-                max_tokens=max_new,
-            )
+            if use_vlm_backend:
+                # Gemma 4 über mlx_vlm (text-only, keine Bilder)
+                prompt = apply_chat_template(tok, vlm_cfg, chunk_text.strip(), num_images=0)
+                result = generate_vlm(model_format, tok, prompt, [], max_tokens=max_new, verbose=False)
+                out = result.text.strip() if hasattr(result, "text") else str(result).strip()
+            else:
+                # Template anwenden, falls vorhanden, sonst Fallback-Prompt
+                try:
+                    prompt = tok.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+                except Exception:
+                    prompt = system + "\n\n" + chunk_text.strip() + "\n\n"
+                out = generate_lm(
+                    model_format,
+                    tok,
+                    prompt=prompt,
+                    max_tokens=max_new,
+                )
         except Exception as e:
             print("Fehler bei der LLM-Generierung für einen Chunk. Gebe Chunk unverändert zurück.")
             print(f"Detail: {e}")
@@ -782,7 +811,31 @@ def main():
         action="store_true",
         help="Ursprünglichen Batteriesparmodus nach dem Lauf wiederherstellen.",
     )
+    parser.add_argument(
+        "--model",
+        choices=["qwen3", "gemma4"],
+        default=None,
+        help="Modell-Preset: 'qwen3' (Standard) oder 'gemma4'.",
+    )
     args = parser.parse_args()
+
+    if args.model is None:
+        print("\nModell-Auswahl:")
+        print("  [1] Qwen3  – VLM 8B + LM 1.7B  (schneller, kleiner)")
+        print("  [2] Gemma 4 26B Q4              (größer, besser)")
+        while True:
+            choice = input("Auswahl [1/2, Standard: 1]: ").strip()
+            if choice in ("", "1"):
+                args.model = "qwen3"
+                break
+            elif choice == "2":
+                args.model = "gemma4"
+                break
+            print("Bitte 1 oder 2 eingeben.")
+
+    model_cfg = MODEL_CONFIGS[args.model]
+    print(f"Verwendetes Modell-Preset: {model_cfg['label']}\n")
+
     pdf_in = args.input_pdf
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -896,7 +949,10 @@ def main():
         set_start_time(processing_start_ts)
         if imgs:
             set_phase("Bilder")
-            caps = caption_images(imgs, set_phase_cb=set_phase)
+            caps = caption_images(imgs,
+                                  model_path=model_cfg["vlm_model"],
+                                  img_size=model_cfg["img_size"],
+                                  set_phase_cb=set_phase)
         else:
             caps = {}
 
@@ -924,7 +980,9 @@ def main():
         # 7. Finalen Text durch ein LLM formatieren lassen
         print("Optimiere die Formatierung des finalen Texts mit MLX-LLM...\n")
         set_phase("Formatieren")
-        final = format_ocr(final)
+        final = format_ocr(final,
+                           lm_model=model_cfg["lm_model"],
+                           max_ctx_tokens=model_cfg["max_ctx_tokens"])
         print(f"Formatierte Textlänge: {len(final)} Zeichen.\n")
 
         # 8. Ausgabe
