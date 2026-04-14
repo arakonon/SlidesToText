@@ -278,7 +278,7 @@ def format_ocr(text: str,
     system = (
         "Du bist ein stupider Texteditor. "
         "Du musst die folgenden Formatierungen anwenden: "
-        "Gib den gesamten Text vollständig zurück. Nichts weglassen, nichts hinzufügen, nichts umsortieren. "
+        "Gib den gesamten Text vollständig zurück, UNVERÄNDERT!!. Nichts weglassen, nichts hinzufügen, nichts umsortieren. Außer:"
         "Entferne Zeilenumbrüche mitten im Satz. "
         "Korrigiere Leerzeichen vor Satzzeichen. "
         "Entferne doppelte oder unnötige Leerzeilen. "
@@ -305,7 +305,21 @@ def format_ocr(text: str,
         try:
             if use_vlm_backend:
                 # Gemma 4 über mlx_vlm (text-only, keine Bilder)
-                prompt = apply_chat_template(tok, vlm_cfg, chunk_text.strip(), num_images=0)
+                # System-Prompt über den nativen Chat-Template-Mechanismus einschleusen
+                try:
+                    inner_tok = tok.tokenizer if hasattr(tok, "tokenizer") else tok
+                    prompt = inner_tok.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+                except Exception:
+                    # Fallback: System-Prompt dem User-Text voranstellen
+                    prompt = apply_chat_template(
+                        tok, vlm_cfg,
+                        f"{system}\n\n{chunk_text.strip()}",
+                        num_images=0,
+                    )
                 result = generate_vlm(model_format, tok, prompt, [], max_tokens=max_new, verbose=False)
                 out = result.text.strip() if hasattr(result, "text") else str(result).strip()
             else:

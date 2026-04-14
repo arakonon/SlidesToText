@@ -20,3 +20,7 @@ Legacy Outcomes/
 
 # Statistik
 processing_stats.csv
+
+# Claude
+.claudeignore
+CLAUDE.md
