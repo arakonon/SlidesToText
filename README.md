@@ -20,17 +20,17 @@ echo 'GOOGLE_API_KEY=dein-key' >> .env   # oder: export GOOGLE_API_KEY=dein-key
 
 ## Modell-Auswahl (MLX nur)
 ```bash
-python3 slidesToText-MLX.py --model qwen3 deine-folien.pdf    # Qwen3 (Standard)
-python3 slidesToText-MLX.py --model gemma4 deine-folien.pdf   # Gemma 4 26B Q4
-python3 slidesToText-MLX.py deine-folien.pdf                  # Interaktive Auswahl
+python3 slidesToText-MLX.py deine-folien.pdf                  # Gemma 4 (Standard)
+python3 slidesToText-MLX.py --model qwen3 deine-folien.pdf    # Qwen3 (schneller, kleiner)
+python3 slidesToText-MLX.py --model gemma4 deine-folien.pdf   # Gemma 4 26B Q4 (explizit)
 ```
 
 | Modell | VLM | LLM | Bildgröße | Kontext | Geschwindigkeit |
 |---|---|---|---|---|---|
-| **Qwen3** (Standard) | Qwen3-VL 8B | Qwen3 1.7B | 512×512 | 32k | Schneller |
-| **Gemma 4** | Gemma 4 26B | Gemma 4 26B | 896×896 | 128k | Langsamer, bessere Qualität |
+| **Gemma 4** (Standard) | Gemma 4 26B | Gemma 4 26B | 896×896 | 128k | Langsamer, bessere Qualität |
+| **Qwen3** | Qwen3-VL 8B | Qwen3 1.7B | 512×512 | 32k | Schneller |
 
-Ohne `--model`-Flag wird interaktiv gefragt.
+Ohne `--model`-Flag wird automatisch Gemma 4 verwendet.
 
 ## Ablauf
 1) Text extrahieren und säubern (Kopf/Fußzeilen, Duplikate)  

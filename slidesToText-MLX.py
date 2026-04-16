@@ -266,8 +266,10 @@ def format_ocr(text: str,
             return text
         # Etwa halbe-halbe: die Hälfte für Eingabe, die Hälfte für Ausgabe
         max_user_tokens = available // 2
-        # Aggressiver chunken: hart deckeln, damit das Modell kleinere Stücke bekommt
-        max_user_tokens = min(max_user_tokens, 6000)
+        # Qwen3 (32k) bekommt einen aggressiven Deckel, damit kleine Chunks stabiler sind.
+        # Gemma 4 (128k) kann den vollen halben Kontext (~63k) nutzen – kein Chunking nötig.
+        if not use_vlm_backend:
+            max_user_tokens = min(max_user_tokens, 6000)
         # Ausgabe sollte mindestens so lang wie Eingabe sein dürfen + Puffer
         max_new_tokens = max_user_tokens + 500
     except Exception as e:
@@ -828,24 +830,10 @@ def main():
     parser.add_argument(
         "--model",
         choices=["qwen3", "gemma4"],
-        default=None,
-        help="Modell-Preset: 'qwen3' (Standard) oder 'gemma4'.",
+        default="gemma4",
+        help="Modell-Preset: 'qwen3' oder 'gemma4' (Standard).",
     )
     args = parser.parse_args()
-
-    if args.model is None:
-        print("\nModell-Auswahl:")
-        print("  [1] Qwen3  – VLM 8B + LM 1.7B  (schneller, kleiner)")
-        print("  [2] Gemma 4 26B Q4              (größer, besser)")
-        while True:
-            choice = input("Auswahl [1/2, Standard: 1]: ").strip()
-            if choice in ("", "1"):
-                args.model = "qwen3"
-                break
-            elif choice == "2":
-                args.model = "gemma4"
-                break
-            print("Bitte 1 oder 2 eingeben.")
 
     model_cfg = MODEL_CONFIGS[args.model]
     print(f"Verwendetes Modell-Preset: {model_cfg['label']}\n")
