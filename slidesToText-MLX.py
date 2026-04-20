@@ -388,7 +388,9 @@ def format_ocr(text: str,
     # Versuche, Token-basiert zu chunken, um den Kontext maximal auszunutzen.
     chunks = []
     try:
-        user_tokens = tok.encode(text)
+        # Für VLM-Backend (Gemma 4) den inneren Tokenizer verwenden, da der Processor kein .encode() hat
+        enc_tok = (tok.tokenizer if (use_vlm_backend and hasattr(tok, "tokenizer")) else tok)
+        user_tokens = enc_tok.encode(text)
 
         if len(user_tokens) <= max_user_tokens:
             # Passt komplett in einen Kontext → einmal durch das LLM schicken
