@@ -159,6 +159,14 @@ def remove_repeated_footers_auto(text_layer_list, min_count=5, max_footer_lines=
         return text_layer_list
     candidates.sort(key=lambda x: (x[0], x[2]), reverse=True)
     footer_lines, footer_block, _ = candidates[0]
+    print(f"Erkannte Fußzeile ({footer_lines} Zeilen):\n---\n{footer_block}\n---")
+    try:
+        answer = input("Diese Fußzeile wirklich entfernen? [J/n]: ").strip().lower()
+    except EOFError:
+        answer = "j"
+    if answer in ("n", "nein", "no"):
+        print("Fußzeile bleibt erhalten.\n")
+        return text_layer_list
     print(f"Entferne Fußzeile ({footer_lines} Zeilen):\n---\n{footer_block}\n---\n")
     cleaned, removed_count, first_found = [], 0, False
     for page in text_layer_list:
