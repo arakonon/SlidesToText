@@ -1022,7 +1022,7 @@ def main():
         try:
             append_stat(
                 {
-                    "chars": len(final),
+                    "chars": char_est,
                     "images": len(imgs),
                     "duration_sec": round(duration, 2),
                     "estimated_sec": est_total_in_use if est_total_in_use is not None else "",
